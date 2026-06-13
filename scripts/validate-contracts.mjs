@@ -215,6 +215,12 @@ assert(repositoryChecks.includes('npm run doctor -- --fail-on high fixtures/wp-p
 assert(repositoryChecks.includes('npm run doctor:repo'), '_repository-checks.yml must run the repository doctor gate');
 assert(repositoryChecks.includes('fixtures/php-package'), '_repository-checks.yml must execute PHP fixture workflows');
 assert(repositoryChecks.includes('fixtures/wp-plugin'), '_repository-checks.yml must execute archive fixture workflows');
+for (const required of ['actions: read', 'attestations: write', 'id-token: write']) {
+  assert(
+    repositoryChecks.includes(required),
+    `_repository-checks.yml archive fixture must grant ${required} for reusable workflow startup validation`,
+  );
+}
 assert(existsSync(path.join(root, '.github', 'dependabot.yml')), 'dependabot.yml must keep pinned action updates visible');
 assert(existsSync(path.join(root, 'scripts', 'doctor.mjs')), 'doctor.mjs must provide consumer diagnostics');
 const packageScripts = packageJson.scripts;

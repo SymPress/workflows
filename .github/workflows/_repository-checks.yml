@@ -99,6 +99,11 @@ jobs:
 
   fixture-archive:
     name: Fixture WordPress archive
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
     uses: ./.github/workflows/wordpress-archive.yml
     with:
       working_directory: fixtures/wp-plugin
