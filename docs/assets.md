@@ -5,7 +5,7 @@ Use `assets-build.yml` for Composer asset compiler builds, Node builds, or both.
 ```yml
 jobs:
   assets:
-    uses: sympress/reusable-workflows/.github/workflows/assets-build.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/assets-build.yml@v1
     with:
       working_directory: .
       run_asset_compiler: true
@@ -22,3 +22,5 @@ The workflow:
 - runs the configured build script when present;
 - optionally uploads build output as an artifact.
 
+Hidden files are excluded from uploaded artifacts unless
+`artifact_include_hidden_files: true` is set explicitly.

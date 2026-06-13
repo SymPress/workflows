@@ -73,6 +73,11 @@ on:
         type: string
         default: ''
         required: false
+      artifact_include_hidden_files:
+        description: Include hidden files in artifact uploads.
+        type: boolean
+        default: false
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -114,6 +119,39 @@ jobs:
           test -f "$WD/composer.json" && echo "has_composer=true" >> "$GITHUB_OUTPUT" || echo "has_composer=false" >> "$GITHUB_OUTPUT"
           test -f "$WD/package.json" && echo "has_package_json=true" >> "$GITHUB_OUTPUT" || echo "has_package_json=false" >> "$GITHUB_OUTPUT"
 
+      - name: Detect package manager
+        id: package-manager
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          path_for() {
+            if [ "$WD" = "." ]; then
+              printf '%s' "$1"
+            else
+              printf '%s/%s' "${WD%/}" "$1"
+            fi
+          }
+
+          if [ -f "$(path_for pnpm-lock.yaml)" ]; then
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for pnpm-lock.yaml)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for yarn.lock)" ]; then
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for yarn.lock)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for package-lock.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for package-lock.json)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for npm-shrinkwrap.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for npm-shrinkwrap.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "lockfile=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Export custom environment
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
@@ -151,11 +189,20 @@ jobs:
           composer-options: ${{ inputs.composer_options }}
 
       - name: Set up Node
-        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build && steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Set up Node with cache
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build && steps.package-manager.outputs.cache != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+          cache: ${{ steps.package-manager.outputs.cache }}
+          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
       - name: Install Node dependencies
         if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
@@ -218,4 +265,4 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: ${{ format('{0}/{1}', inputs.working_directory, inputs.artifact_path) }}
           if-no-files-found: error
-          include-hidden-files: true
+          include-hidden-files: ${{ inputs.artifact_include_hidden_files }}
