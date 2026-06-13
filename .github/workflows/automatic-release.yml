@@ -21,12 +21,12 @@ on:
       workflow_repository:
         description: Repository containing fallback release templates.
         type: string
-        default: sympress/reusable-workflows
+        default: sympress/workflows
         required: false
       workflow_ref:
         description: Ref used when checking out fallback release templates.
         type: string
-        default: main
+        default: v1
         required: false
       timeout_minutes:
         description: Job timeout.
@@ -122,6 +122,10 @@ jobs:
           RELEASE_CONFIG: ${{ inputs.release_config }}
         run: |
           set -euo pipefail
+          if [[ "$RELEASE_CONFIG" = /* || "$RELEASE_CONFIG" == *..* || ! "$RELEASE_CONFIG" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::release_config must be a repository-relative path using only letters, numbers, dots, underscores, hyphens, and slashes."
+            exit 1
+          fi
           if [ -f "$RELEASE_CONFIG" ]; then
             echo "has_config=true" >> "$GITHUB_OUTPUT"
           else
@@ -173,4 +177,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
           NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
-        run: npx semantic-release --ci --extends ./${{ inputs.release_config }}
+          RELEASE_CONFIG: ${{ inputs.release_config }}
+        run: npx semantic-release --ci --extends "./$RELEASE_CONFIG"

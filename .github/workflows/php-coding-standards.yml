@@ -82,10 +82,29 @@ jobs:
             const items = Array.isArray(data)
               ? data
               : Object.entries(data).map(([name, value]) => ({ name, value }));
+            const blockedNames = new Set([
+              'BASH_ENV',
+              'ENV',
+              'GITHUB_ENV',
+              'GITHUB_OUTPUT',
+              'GITHUB_PATH',
+              'LD_PRELOAD',
+              'NODE_OPTIONS',
+              'PATH',
+            ]);
 
             for (const item of items) {
+              const name = String(item.name || '');
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                core.setFailed(`Invalid environment variable name: ${name}`);
+                return;
+              }
+              if (/^(GITHUB_|ACTIONS_|RUNNER_)/.test(name) || blockedNames.has(name)) {
+                core.setFailed(`Refusing to override reserved environment variable: ${name}`);
+                return;
+              }
               core.setSecret(String(item.value));
-              core.exportVariable(item.name, String(item.value));
+              core.exportVariable(name, String(item.value));
             }
 
       - name: Set up PHP

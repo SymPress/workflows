@@ -26,7 +26,7 @@ on:
       playwright_install_command:
         description: Command that installs Playwright dependencies.
         type: string
-        default: ddev exec npm install && npx playwright install --with-deps
+        default: ddev exec bash -lc "if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo 'No JavaScript lockfile found.'; exit 1; fi" && npx playwright install --with-deps
         required: false
       playwright_run_command:
         description: Command that runs Playwright tests.
@@ -35,6 +35,11 @@ on:
         required: false
       allow_custom_commands:
         description: Allow custom DDEV, setup, Playwright, and ngrok commands.
+        type: boolean
+        default: false
+        required: false
+      allow_unpinned_node_install:
+        description: Allow the legacy npm install Playwright setup command without lockfiles.
         type: boolean
         default: false
         required: false
@@ -117,6 +122,7 @@ jobs:
         shell: bash
         env:
           ALLOW_CUSTOM_COMMANDS: ${{ inputs.allow_custom_commands }}
+          ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
           DDEV_START_COMMAND: ${{ inputs.ddev_start_command }}
           SETUP_COMMAND: ${{ inputs.setup_command }}
           PLAYWRIGHT_INSTALL_COMMAND: ${{ inputs.playwright_install_command }}
@@ -131,7 +137,13 @@ jobs:
           blocked=()
           [ "$DDEV_START_COMMAND" = "ddev start" ] || blocked+=("ddev_start_command")
           [ -z "$SETUP_COMMAND" ] || blocked+=("setup_command")
-          [ "$PLAYWRIGHT_INSTALL_COMMAND" = "ddev exec npm install && npx playwright install --with-deps" ] || blocked+=("playwright_install_command")
+          default_install='ddev exec bash -lc "if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo '\''No JavaScript lockfile found.'\''; exit 1; fi" && npx playwright install --with-deps'
+          legacy_unpinned_install="ddev exec npm install && npx playwright install --with-deps"
+          if [ "$PLAYWRIGHT_INSTALL_COMMAND" != "$default_install" ]; then
+            if [ "$ALLOW_UNPINNED_NODE_INSTALL" != "true" ] || [ "$PLAYWRIGHT_INSTALL_COMMAND" != "$legacy_unpinned_install" ]; then
+              blocked+=("playwright_install_command")
+            fi
+          fi
           [ "$PLAYWRIGHT_RUN_COMMAND" = "npx playwright test" ] || blocked+=("playwright_run_command")
           [ -z "$NGROK_START_COMMAND" ] || blocked+=("ngrok_start_command")
 
@@ -153,10 +165,29 @@ jobs:
             const items = Array.isArray(data)
               ? data
               : Object.entries(data).map(([name, value]) => ({ name, value }));
+            const blockedNames = new Set([
+              'BASH_ENV',
+              'ENV',
+              'GITHUB_ENV',
+              'GITHUB_OUTPUT',
+              'GITHUB_PATH',
+              'LD_PRELOAD',
+              'NODE_OPTIONS',
+              'PATH',
+            ]);
 
             for (const item of items) {
+              const name = String(item.name || '');
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                core.setFailed(`Invalid environment variable name: ${name}`);
+                return;
+              }
+              if (/^(GITHUB_|ACTIONS_|RUNNER_)/.test(name) || blockedNames.has(name)) {
+                core.setFailed(`Refusing to override reserved environment variable: ${name}`);
+                return;
+              }
               core.setSecret(String(item.value));
-              core.exportVariable(item.name, String(item.value));
+              core.exportVariable(name, String(item.value));
             }
 
       - name: Configure DDEV SSH key
@@ -217,10 +248,29 @@ jobs:
             const items = Array.isArray(data)
               ? data
               : Object.entries(data).map(([name, value]) => ({ name, value }));
+            const blockedNames = new Set([
+              'BASH_ENV',
+              'ENV',
+              'GITHUB_ENV',
+              'GITHUB_OUTPUT',
+              'GITHUB_PATH',
+              'LD_PRELOAD',
+              'NODE_OPTIONS',
+              'PATH',
+            ]);
 
             for (const item of items) {
+              const name = String(item.name || '');
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                core.setFailed(`Invalid DDEV environment variable name: ${name}`);
+                return;
+              }
+              if (/^(GITHUB_|ACTIONS_|RUNNER_)/.test(name) || blockedNames.has(name)) {
+                core.setFailed(`Refusing to override reserved DDEV environment variable: ${name}`);
+                return;
+              }
               core.setSecret(String(item.value));
-              await exec.exec('ddev', ['config', `--web-environment-add=${item.name}=${item.value}`]);
+              await exec.exec('ddev', ['config', `--web-environment-add=${name}=${item.value}`]);
             }
 
       - name: Start DDEV
@@ -281,6 +331,16 @@ jobs:
         if: ${{ env.NGROK_AUTH_TOKEN != '' && inputs.ngrok_start_command != '' }}
         run: |
           set -euo pipefail
+          if [[ ! "$BASEURL_ENV_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "::error::baseurl_env_name must be a valid environment variable name."
+            exit 1
+          fi
+          case "$BASEURL_ENV_NAME" in
+            GITHUB_*|ACTIONS_*|RUNNER_*|BASH_ENV|ENV|LD_PRELOAD|NODE_OPTIONS|PATH)
+              echo "::error::baseurl_env_name must not target a reserved environment variable."
+              exit 1
+              ;;
+          esac
           url="$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https") | .public_url' | head -n 1)"
           if [ -n "$url" ]; then
             echo "${BASEURL_ENV_NAME}=$url" >> "$GITHUB_ENV"
@@ -298,7 +358,16 @@ jobs:
 
       - name: Set artifact name
         id: artifact
-        run: echo "name=${{ inputs.playwright_artifact_name }}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        env:
+          ARTIFACT_NAME: ${{ inputs.playwright_artifact_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ARTIFACT_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::playwright_artifact_name may only contain letters, numbers, dots, underscores, and hyphens."
+            exit 1
+          fi
+          printf 'name=%s\n' "$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload Playwright artifacts
         if: ${{ always() }}

@@ -62,6 +62,11 @@ on:
         type: string
         default: https://npm.pkg.github.com/
         required: false
+      allow_unpinned_node_install:
+        description: Allow npm install when no lockfile exists. Keep disabled for reproducible CI.
+        type: boolean
+        default: false
+        required: false
       build_script:
         description: Optional npm/yarn/pnpm build script before deployment.
         type: string
@@ -131,6 +136,7 @@ jobs:
     env:
       COMPOSER_NO_DEV: 1
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+      ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -249,6 +255,10 @@ jobs:
           elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
+            if [ "${ALLOW_UNPINNED_NODE_INSTALL:-false}" != "true" ]; then
+              echo "::error::No JavaScript lockfile found. Add pnpm-lock.yaml, yarn.lock, package-lock.json, or npm-shrinkwrap.json, or set allow_unpinned_node_install=true for trusted callers."
+              exit 1
+            fi
             npm install
           fi
 

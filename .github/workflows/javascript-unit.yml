@@ -18,6 +18,11 @@ on:
         type: string
         default: https://npm.pkg.github.com/
         required: false
+      allow_unpinned_node_install:
+        description: Allow npm install when no lockfile exists. Keep disabled for reproducible CI.
+        type: boolean
+        default: false
+        required: false
       working_directory:
         description: Directory that contains package.json.
         type: string
@@ -99,6 +104,7 @@ jobs:
     env:
       NODE_OPTIONS: ${{ inputs.node_options }}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+      ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout
@@ -116,10 +122,29 @@ jobs:
             const items = Array.isArray(data)
               ? data
               : Object.entries(data).map(([name, value]) => ({ name, value }));
+            const blockedNames = new Set([
+              'BASH_ENV',
+              'ENV',
+              'GITHUB_ENV',
+              'GITHUB_OUTPUT',
+              'GITHUB_PATH',
+              'LD_PRELOAD',
+              'NODE_OPTIONS',
+              'PATH',
+            ]);
 
             for (const item of items) {
+              const name = String(item.name || '');
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                core.setFailed(`Invalid environment variable name: ${name}`);
+                return;
+              }
+              if (/^(GITHUB_|ACTIONS_|RUNNER_)/.test(name) || blockedNames.has(name)) {
+                core.setFailed(`Refusing to override reserved environment variable: ${name}`);
+                return;
+              }
               core.setSecret(String(item.value));
-              core.exportVariable(item.name, String(item.value));
+              core.exportVariable(name, String(item.value));
             }
 
       - name: Set up SSH
@@ -201,6 +226,10 @@ jobs:
           elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
+            if [ "${ALLOW_UNPINNED_NODE_INSTALL:-false}" != "true" ]; then
+              echo "::error::No JavaScript lockfile found. Add pnpm-lock.yaml, yarn.lock, package-lock.json, or npm-shrinkwrap.json, or set allow_unpinned_node_install=true for trusted callers."
+              exit 1
+            fi
             npm install
           fi
 

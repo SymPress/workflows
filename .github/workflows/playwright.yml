@@ -18,6 +18,11 @@ on:
         type: string
         default: https://npm.pkg.github.com/
         required: false
+      allow_unpinned_node_install:
+        description: Allow npm install when no lockfile exists. Keep disabled for reproducible CI.
+        type: boolean
+        default: false
+        required: false
       composer_deps_install:
         description: Install Composer dependencies before tests.
         type: boolean
@@ -131,6 +136,8 @@ jobs:
     name: Playwright
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -236,6 +243,10 @@ jobs:
           elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
+            if [ "${ALLOW_UNPINNED_NODE_INSTALL:-false}" != "true" ]; then
+              echo "::error::No JavaScript lockfile found. Add pnpm-lock.yaml, yarn.lock, package-lock.json, or npm-shrinkwrap.json, or set allow_unpinned_node_install=true for trusted callers."
+              exit 1
+            fi
             npm install
           fi
 
@@ -257,9 +268,26 @@ jobs:
             npm run build
           fi
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ inputs.node_version }}-${{ hashFiles(format('{0}/package-lock.json', inputs.working_directory), format('{0}/npm-shrinkwrap.json', inputs.working_directory), format('{0}/pnpm-lock.yaml', inputs.working_directory), format('{0}/yarn.lock', inputs.working_directory), format('{0}/package.json', inputs.working_directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ inputs.node_version }}-
+
       - name: Install Playwright browsers
         working-directory: ${{ inputs.working_directory }}
-        run: npx playwright install ${{ inputs.playwright_browser_args }}
+        shell: bash
+        env:
+          PLAYWRIGHT_BROWSER_ARGS: ${{ inputs.playwright_browser_args }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$PLAYWRIGHT_BROWSER_ARGS" ]; then
+            read -r -a args <<< "$PLAYWRIGHT_BROWSER_ARGS"
+          fi
+          npx playwright install "${args[@]}"
 
       - name: Create environment file
         working-directory: ${{ inputs.working_directory }}
@@ -284,9 +312,24 @@ jobs:
             exit 0
           fi
 
-          set -a
-          source .env.ci || true
-          set +a
+          load_env_file() {
+            [ -f .env.ci ] || return 0
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="${line%$'\r'}"
+              [ -z "$line" ] && continue
+              [[ "$line" =~ ^[[:space:]]*# ]] && continue
+              line="${line#export }"
+              name="${line%%=*}"
+              value="${line#*=}"
+              if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                echo "::error::.env.ci contains an invalid variable name: $name"
+                exit 1
+              fi
+              export "$name=$value"
+            done < .env.ci
+          }
+
+          load_env_file
 
           wp_home="$(node -e "const c = require('./.wp-env.json'); console.log(c.config?.WP_HOME || '')")"
           if [ -n "$wp_home" ]; then
@@ -322,12 +365,15 @@ jobs:
         run: |
           set -euo pipefail
           ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
-          domain_flag=""
+          domain_args=()
           if [ -n "$NGROK_DOMAIN" ]; then
-            domain_flag="--domain=$NGROK_DOMAIN"
+            if [[ ! "$NGROK_DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]; then
+              echo "::error::ngrok_domain may only contain letters, numbers, dots, and hyphens."
+              exit 1
+            fi
+            domain_args=("--domain=$NGROK_DOMAIN")
           fi
-          # shellcheck disable=SC2086
-          ngrok http 80 $domain_flag --log=stdout --log-level=info > /tmp/ngrok.log 2>&1 &
+          ngrok http 80 "${domain_args[@]}" --log=stdout --log-level=info > /tmp/ngrok.log 2>&1 &
           sleep 3
           ngrok_url="$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https") | .public_url' | head -n 1)"
           if [ -z "$ngrok_url" ]; then
@@ -355,9 +401,24 @@ jobs:
             exit 1
           fi
 
-          set -a
-          source .env.ci || true
-          set +a
+          load_env_file() {
+            [ -f .env.ci ] || return 0
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="${line%$'\r'}"
+              [ -z "$line" ] && continue
+              [[ "$line" =~ ^[[:space:]]*# ]] && continue
+              line="${line#export }"
+              name="${line%%=*}"
+              value="${line#*=}"
+              if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                echo "::error::.env.ci contains an invalid variable name: $name"
+                exit 1
+              fi
+              export "$name=$value"
+            done < .env.ci
+          }
+
+          load_env_file
           bash -euo pipefail -c "$PRE_SCRIPT"
 
       - name: Run Playwright
@@ -370,9 +431,24 @@ jobs:
         run: |
           set -euo pipefail
           trap 'rm -f .env.ci' EXIT
-          set -a
-          source .env.ci || true
-          set +a
+          load_env_file() {
+            [ -f .env.ci ] || return 0
+            while IFS= read -r line || [ -n "$line" ]; do
+              line="${line%$'\r'}"
+              [ -z "$line" ] && continue
+              [[ "$line" =~ ^[[:space:]]*# ]] && continue
+              line="${line#export }"
+              name="${line%%=*}"
+              value="${line#*=}"
+              if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                echo "::error::.env.ci contains an invalid variable name: $name"
+                exit 1
+              fi
+              export "$name=$value"
+            done < .env.ci
+          }
+
+          load_env_file
 
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.PLAYWRIGHT_SCRIPT] ? 0 : 1)"; then
             if [ -f pnpm-lock.yaml ]; then

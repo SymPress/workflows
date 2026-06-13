@@ -70,9 +70,15 @@ jobs:
         shell: bash
         env:
           INPUT_PLUGIN_FOLDER: ${{ inputs.plugin_folder_name }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
         run: |
-          plugin_folder="${INPUT_PLUGIN_FOLDER:-${{ github.event.repository.name }}}"
-          echo "folder=$plugin_folder" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          plugin_folder="${INPUT_PLUGIN_FOLDER:-$REPOSITORY_NAME}"
+          if [[ ! "$plugin_folder" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::plugin_folder_name may only contain letters, numbers, dots, underscores, and hyphens."
+            exit 1
+          fi
+          printf 'folder=%s\n' "$plugin_folder" >> "$GITHUB_OUTPUT"
 
       - name: Zip artifact
         working-directory: package
@@ -85,6 +91,14 @@ jobs:
           QIT_SHA256: ${{ inputs.qit_sha256 }}
         run: |
           set -euo pipefail
+          if [[ ! "$QIT_REF" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$QIT_REF" == *..* ]]; then
+            echo "::error::qit_ref may only contain ref-safe characters and must not contain '..'."
+            exit 1
+          fi
+          if [ -n "$QIT_SHA256" ] && [[ ! "$QIT_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+            echo "::error::qit_sha256 must be a 64-character SHA256 hex digest."
+            exit 1
+          fi
           curl -fsSL "https://raw.githubusercontent.com/woocommerce/qit-cli/${QIT_REF}/qit" -o qit
           if [ -n "$QIT_SHA256" ]; then
             printf '%s  qit\n' "$QIT_SHA256" | sha256sum -c -
@@ -95,4 +109,23 @@ jobs:
         run: ./qit partner:add --user="$WOO_PARTNER_USER" --qit_token="$WOO_PARTNER_SECRET"
 
       - name: Run QIT
-        run: ./qit run:${{ inputs.qit_test }} ${{ steps.plugin.outputs.folder }} --zip=plugin.zip ${{ inputs.qit_options }} --print-report-url
+        shell: bash
+        env:
+          PLUGIN_FOLDER: ${{ steps.plugin.outputs.folder }}
+          QIT_OPTIONS: ${{ inputs.qit_options }}
+          QIT_TEST: ${{ inputs.qit_test }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$QIT_TEST" =~ ^[A-Za-z0-9:_-]+$ ]]; then
+            echo "::error::qit_test may only contain letters, numbers, colons, underscores, and hyphens."
+            exit 1
+          fi
+
+          args=("run:${QIT_TEST}" "$PLUGIN_FOLDER" "--zip=plugin.zip")
+          if [ -n "$QIT_OPTIONS" ]; then
+            read -r -a extra_args <<< "$QIT_OPTIONS"
+            args+=("${extra_args[@]}")
+          fi
+          args+=("--print-report-url")
+
+          ./qit "${args[@]}"
