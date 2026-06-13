@@ -20,6 +20,9 @@ The fallback config:
 - updates `composer.json`, `package.json`, `package-lock.json`, and WordPress headers when present;
 - commits release files with `[skip ci]`.
 
+The fallback config enables the npm plugin only when the caller repository has
+`package.json`, so PHP-only repositories do not need a placeholder package file.
+
 The workflow serializes releases per ref and installs pinned semantic-release
 packages. Production callers should pin this reusable workflow to a release tag.
 See [Release Strategy](release-strategy.md).
