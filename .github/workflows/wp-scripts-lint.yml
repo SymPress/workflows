@@ -83,13 +83,13 @@ jobs:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Export custom environment
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
         if: ${{ env.ENV_VARS_JSON != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const raw = process.env.ENV_VARS_JSON || '';
@@ -107,7 +107,7 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
         if: ${{ env.SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ env.SSH_KEY }}
 
@@ -154,14 +154,14 @@ jobs:
 
       - name: Set up Node
         if: ${{ steps.package-manager.outputs.cache == '' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
 
       - name: Set up Node with cache
         if: ${{ steps.package-manager.outputs.cache != '' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
