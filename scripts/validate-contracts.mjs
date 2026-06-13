@@ -49,8 +49,10 @@ const legacyBrand = ['SymPress', ['Reus', 'able'].join(''), 'Workflows'].join(' 
 const legacySlug = ['sympress', [['reus', 'able'].join(''), 'workflows'].join('-')].join('/');
 
 assert(packageJson.name === '@sympress/workflows', 'package.json must use the SymPress Workflows package name');
+assert(packageJson.license === 'GPL-2.0-or-later', 'package.json must use the GPL-2.0-or-later license');
 assert(packageLock.name === '@sympress/workflows', 'package-lock.json must use the SymPress Workflows package name');
 assert(packageLock.packages[''].name === '@sympress/workflows', 'package-lock root package must use the SymPress Workflows package name');
+assert(packageLock.packages[''].license === 'GPL-2.0-or-later', 'package-lock root package must use the GPL-2.0-or-later license');
 assert(catalog.repository === 'sympress/workflows', 'workflow-catalog.json must use the SymPress Workflows repository slug');
 assert(fixturePhpPackage.license, 'fixtures/php-package/composer.json must include a license for strict Composer validation');
 assert(
