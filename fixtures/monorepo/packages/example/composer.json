@@ -1,0 +1,8 @@
+{
+  "name": "sympress/fixture-monorepo-example",
+  "type": "library",
+  "require-dev": {
+    "phpstan/phpstan": "^2.1",
+    "squizlabs/php_codesniffer": "^3.13"
+  }
+}
