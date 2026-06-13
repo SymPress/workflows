@@ -24,6 +24,11 @@ The workflow refuses same-branch writes by default. Set `allow_same_branch: true
 
 When `package_version` is empty, the workflow derives a version from the latest tag, the source branch slug, and the short commit SHA.
 
+`skip_existing_build` is enabled by default. When the target build branch already
+contains the current source `SHA` header, Composer, Node, asset compiler, and
+scoper steps are skipped and the existing build branch is repackaged as the
+workflow artifact. The `skipped_existing_build` output reports that decision.
+
 ## Artifact Safety
 
 The build branch is writable, but the uploaded artifact is still guarded.

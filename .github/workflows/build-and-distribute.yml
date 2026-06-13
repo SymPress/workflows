@@ -33,6 +33,11 @@ on:
         type: boolean
         default: false
         required: false
+      skip_existing_build:
+        description: Skip expensive build steps when the build branch already contains the source SHA.
+        type: boolean
+        default: true
+        required: false
       allow_github_ssh_keyscan:
         description: Allow ssh-keyscan fallback for github.com when GITHUB_KNOWN_HOSTS is not provided.
         type: boolean
@@ -168,6 +173,9 @@ on:
       package_version:
         description: Version used for the build.
         value: ${{ jobs.build-and-distribute.outputs.package_version }}
+      skipped_existing_build:
+        description: Whether an existing build branch with the same source SHA was reused.
+        value: ${{ jobs.build-and-distribute.outputs.skipped_existing_build }}
 
 permissions:
   contents: write
@@ -184,6 +192,7 @@ jobs:
       artifact: ${{ steps.package.outputs.artifact }}
       built_branch: ${{ steps.metadata.outputs.built_branch }}
       package_version: ${{ steps.metadata.outputs.package_version }}
+      skipped_existing_build: ${{ steps.existing-build.outputs.exists }}
     env:
       COMPOSER_MIRROR_PATH_REPOS: 1
       NODE_OPTIONS: ${{ inputs.node_options }}
@@ -300,13 +309,44 @@ jobs:
             echo "package_version=$package_version"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Check existing build
+        id: existing-build
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
+          SKIP_EXISTING_BUILD: ${{ inputs.skip_existing_build }}
+        run: |
+          set -euo pipefail
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$SKIP_EXISTING_BUILD" != "true" ]; then
+            exit 0
+          fi
+
+          if ! git ls-remote --exit-code --heads origin "$BUILT_BRANCH" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          git fetch --depth=1 origin "$BUILT_BRANCH"
+          if git grep -Eq "(^|[[:space:]])SHA:[[:space:]]*$SOURCE_SHA([[:space:]]|$)" FETCH_HEAD -- '*.php' 'style.css' 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout build branch
         shell: bash
         env:
           SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
           BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
+          EXISTING_BUILD: ${{ steps.existing-build.outputs.exists }}
         run: |
           set -euo pipefail
+
+          if [ "$EXISTING_BUILD" = "true" ]; then
+            git fetch --depth=1 origin "$BUILT_BRANCH"
+            git checkout -B "$BUILT_BRANCH" "origin/$BUILT_BRANCH"
+            exit 0
+          fi
 
           if git ls-remote --exit-code --heads origin "$BUILT_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$BUILT_BRANCH"
@@ -323,6 +363,7 @@ jobs:
 
       - name: Detect project files
         id: detect
+        if: ${{ steps.existing-build.outputs.exists != 'true' }}
         shell: bash
         env:
           WD: ${{ inputs.working_directory }}
@@ -333,7 +374,7 @@ jobs:
 
       - name: Detect package manager
         id: package-manager
-        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_package_json == 'true' }}
         shell: bash
         env:
           WD: ${{ inputs.working_directory }}
@@ -365,7 +406,7 @@ jobs:
           fi
 
       - name: Set up PHP
-        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_composer == 'true' }}
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
@@ -374,7 +415,7 @@ jobs:
           coverage: none
 
       - name: Install Composer dependencies
-        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_composer == 'true' }}
         uses: ramsey/composer-install@v3
         env:
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
@@ -383,14 +424,14 @@ jobs:
           composer-options: ${{ inputs.composer_options }}
 
       - name: Set up Node
-        if: ${{ steps.detect.outputs.has_package_json == 'true' && steps.package-manager.outputs.cache == '' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_package_json == 'true' && steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
 
       - name: Set up Node with cache
-        if: ${{ steps.detect.outputs.has_package_json == 'true' && steps.package-manager.outputs.cache != '' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_package_json == 'true' && steps.package-manager.outputs.cache != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
@@ -399,7 +440,7 @@ jobs:
           cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
       - name: Install Node dependencies
-        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_package_json == 'true' }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         run: |
@@ -417,6 +458,7 @@ jobs:
           fi
 
       - name: Update versions
+        if: ${{ steps.existing-build.outputs.exists != 'true' }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         env:
@@ -452,12 +494,26 @@ jobs:
               sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?Version:[[:space:]]*).*/\\1$PACKAGE_VERSION/" "$main_file"
               if grep -Eq '^[[:space:]]*(\*[[:space:]]*)?SHA:' "$main_file"; then
                 sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1${{ github.sha }}/" "$main_file"
+              elif grep -Eq '^[[:space:]]*(\*[[:space:]]*)?Version:' "$main_file"; then
+                tmp_file="$(mktemp)"
+                awk -v sha="${{ github.sha }}" '
+                  {
+                    print
+                  }
+                  !inserted && /^[[:space:]]*(\*[[:space:]]*)?Version:/ {
+                    prefix = $0
+                    sub(/Version:.*/, "", prefix)
+                    print prefix "SHA: " sha
+                    inserted = 1
+                  }
+                ' "$main_file" > "$tmp_file"
+                mv "$tmp_file" "$main_file"
               fi
             fi
           fi
 
       - name: Execute pre script
-        if: ${{ inputs.pre_script != '' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && inputs.pre_script != '' }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         env:
@@ -473,7 +529,7 @@ jobs:
           bash -euo pipefail -c "$PRE_SCRIPT"
 
       - name: Run Composer asset compiler
-        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.run_asset_compiler }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_composer == 'true' && inputs.run_asset_compiler }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         env:
@@ -488,7 +544,7 @@ jobs:
           fi
 
       - name: Run Node build
-        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_package_json == 'true' }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         env:
@@ -509,7 +565,7 @@ jobs:
           fi
 
       - name: Run PHP-Scoper
-        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.run_php_scoper }}
+        if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_composer == 'true' && inputs.run_php_scoper }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
         run: |
@@ -639,6 +695,7 @@ jobs:
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: Commit build branch
+        if: ${{ steps.existing-build.outputs.exists != 'true' }}
         shell: bash
         env:
           BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
