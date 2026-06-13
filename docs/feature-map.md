@@ -5,9 +5,8 @@ The workflow set covers the full automation surface SymPress projects currently 
 ## Quality
 
 - `composer-validate.yml`: Composer validate and audit.
-- `php-lint.yml`: PHP syntax linting without requiring dependencies.
 - `php-coding-standards.yml`: PHPCS with Composer script auto-detection.
-- `php-static-analysis.yml`: PHPStan, Psalm, or Composer script auto-detection.
+- `php-static-analysis.yml`: PHPStan or Composer script auto-detection.
 - `php-unit.yml`: PHPUnit with `test:unit`, `test`, and `tests` script support.
 - `sympress-qa.yml`: Root plus `packages/*` package discovery for monorepos.
 - `javascript-static-analysis.yml`: TypeScript or package script static analysis.
@@ -39,4 +38,3 @@ The workflow set covers the full automation surface SymPress projects currently 
 - Secrets are optional unless a workflow cannot work without them.
 - Build workflows avoid same-branch writes unless explicitly allowed.
 - `.distignore` is supported for package artifacts.
-

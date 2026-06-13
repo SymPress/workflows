@@ -10,16 +10,6 @@ jobs:
     uses: sympress/reusable-workflows/.github/workflows/composer-validate.yml@main
 ```
 
-## PHP Syntax Lint
-
-```yml
-jobs:
-  lint:
-    uses: sympress/reusable-workflows/.github/workflows/php-lint.yml@main
-    with:
-      lint_paths: src tests
-```
-
 ## Coding Standards
 
 ```yml
@@ -38,11 +28,9 @@ Auto-detection prefers Composer scripts `cs:audit` and `cs`, then falls back to 
 jobs:
   static-analysis:
     uses: sympress/reusable-workflows/.github/workflows/php-static-analysis.yml@main
-    with:
-      engine: auto
 ```
 
-Auto-detection prefers Composer scripts `cs:analyze` and `static-analysis`, then PHPStan or Psalm config files.
+Auto-detection prefers Composer scripts `cs:analyze` and `static-analysis`, then PHPStan config files.
 
 ## Unit Tests
 
@@ -53,4 +41,3 @@ jobs:
 ```
 
 Auto-detection prefers Composer scripts `test:unit`, `test`, and `tests`, then falls back to PHPUnit config files.
-

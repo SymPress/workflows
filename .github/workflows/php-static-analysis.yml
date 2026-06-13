@@ -23,13 +23,8 @@ on:
         type: string
         default: --prefer-dist --no-progress --no-interaction
         required: false
-      engine:
-        description: Static analyzer to run. Use auto, phpstan, psalm, or both.
-        type: string
-        default: auto
-        required: false
       command:
-        description: Explicit command to run instead of auto-detecting analyzers.
+        description: Explicit command to run instead of auto-detecting PHPStan.
         type: string
         default: ''
         required: false
@@ -37,11 +32,6 @@ on:
         description: Arguments passed to PHPStan.
         type: string
         default: analyse --no-progress --memory-limit=1G
-        required: false
-      psalm_args:
-        description: Arguments passed to Psalm.
-        type: string
-        default: --output-format=github --no-cache
         required: false
       timeout_minutes:
         description: Job timeout.
@@ -107,9 +97,7 @@ jobs:
         shell: bash
         env:
           COMMAND: ${{ inputs.command }}
-          ENGINE: ${{ inputs.engine }}
           PHPSTAN_ARGS: ${{ inputs.phpstan_args }}
-          PSALM_ARGS: ${{ inputs.psalm_args }}
         run: |
           set -euo pipefail
 
@@ -131,20 +119,12 @@ jobs:
           bin_dir="$(composer config bin-dir)"
           ran=false
 
-          if { [ "$ENGINE" = "auto" ] || [ "$ENGINE" = "phpstan" ] || [ "$ENGINE" = "both" ]; } \
-            && { [ -f phpstan.neon ] || [ -f phpstan.neon.dist ] || [ -f phpstan.dist.neon ]; }; then
+          if [ -f phpstan.neon ] || [ -f phpstan.neon.dist ] || [ -f phpstan.dist.neon ]; then
             # shellcheck disable=SC2086
             "${bin_dir%/}/phpstan" $PHPSTAN_ARGS
             ran=true
           fi
 
-          if { [ "$ENGINE" = "auto" ] || [ "$ENGINE" = "psalm" ] || [ "$ENGINE" = "both" ]; } \
-            && { [ -f psalm.xml ] || [ -f psalm.xml.dist ]; }; then
-            # shellcheck disable=SC2086
-            "${bin_dir%/}/psalm" --php-version="${{ inputs.php_version }}" $PSALM_ARGS
-            ran=true
-          fi
-
           if [ "$ran" = false ]; then
-            echo "No supported static analysis config found."
+            echo "No PHPStan configuration found."
           fi

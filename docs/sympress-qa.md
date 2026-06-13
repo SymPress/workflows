@@ -28,7 +28,6 @@ Useful inputs:
 | `package_glob` | `packages/*` | Composer package discovery glob. |
 | `run_validate` | `true` | Run `composer validate`. |
 | `run_audit` | `true` | Run `composer audit`. |
-| `run_lint` | `true` | Run PHP syntax linting. |
 | `run_phpcs` | `true` | Run PHPCS or coding standards scripts. |
 | `run_phpstan` | `true` | Run static analysis. |
 | `run_phpunit` | `true` | Run PHPUnit or test scripts. |
@@ -41,4 +40,3 @@ Secrets:
 | `COMPOSER_AUTH_JSON` | Composer auth JSON for private packages. |
 | `NPM_REGISTRY_TOKEN` | npm registry token for package builds. |
 | `ENV_VARS` | JSON object or array of `{ "name": "...", "value": "..." }`. |
-

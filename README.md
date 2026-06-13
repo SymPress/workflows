@@ -13,8 +13,7 @@ should run and which inputs differ.
 
 ## Feature Set
 
-- PHP linting, coding standards, static analysis, unit tests, and Composer
-  validation.
+- PHPCS linting, PHPStan static analysis, unit tests, and Composer validation.
 - SymPress package QA for root projects and `packages/*` monorepos.
 - JavaScript static analysis and unit tests with npm, yarn, or pnpm detection.
 - `@wordpress/scripts` linting for JS, styles, Markdown, and `package.json`.
@@ -58,7 +57,7 @@ publishing tagged releases.
 - [SymPress QA](docs/sympress-qa.md) for Composer projects and package
   monorepos.
 - [Feature map](docs/feature-map.md) for the complete workflow coverage.
-- [PHP](docs/php.md) for focused PHP linting, PHPCS, PHPStan, and PHPUnit jobs.
+- [PHP](docs/php.md) for focused PHPCS, PHPStan, and PHPUnit jobs.
 - [JavaScript](docs/javascript.md) for static analysis and unit tests.
 - [WordPress scripts](docs/wp-scripts.md) for `@wordpress/scripts` linting.
 - [Assets](docs/assets.md) for `sympress/asset-compiler` and npm builds.

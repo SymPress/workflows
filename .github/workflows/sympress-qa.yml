@@ -43,18 +43,13 @@ on:
         type: boolean
         default: true
         required: false
-      run_lint:
-        description: Run php -l syntax checks.
-        type: boolean
-        default: true
-        required: false
       run_phpcs:
         description: Run PHPCS or Composer coding standards scripts.
         type: boolean
         default: true
         required: false
       run_phpstan:
-        description: Run PHPStan/Psalm or Composer static analysis scripts.
+        description: Run PHPStan or Composer static analysis scripts.
         type: boolean
         default: true
         required: false
@@ -139,7 +134,6 @@ jobs:
           COMPOSER_OPTIONS: ${{ inputs.composer_options }}
           RUN_VALIDATE: ${{ inputs.run_validate }}
           RUN_AUDIT: ${{ inputs.run_audit }}
-          RUN_LINT: ${{ inputs.run_lint }}
           RUN_PHPCS: ${{ inputs.run_phpcs }}
           RUN_PHPSTAN: ${{ inputs.run_phpstan }}
           RUN_PHPUNIT: ${{ inputs.run_phpunit }}
@@ -204,25 +198,6 @@ jobs:
             fi
           }
 
-          lint_php() {
-            local tmp_file
-            tmp_file="$(mktemp)"
-            find . \
-              -type f \
-              -name '*.php' \
-              ! -path './vendor/*' \
-              ! -path './node_modules/*' \
-              ! -path './var/cache/*' \
-              -print0 > "$tmp_file"
-
-            if [ ! -s "$tmp_file" ]; then
-              echo "No PHP files to lint."
-              return 0
-            fi
-
-            xargs -0 -n 1 -P "$(nproc)" php -l < "$tmp_file"
-          }
-
           run_phpcs() {
             if has_script "cs:audit"; then
               composer cs:audit
@@ -263,13 +238,8 @@ jobs:
               ran=true
             fi
 
-            if [ -f psalm.xml ] || [ -f psalm.xml.dist ]; then
-              "${bin_dir%/}/psalm" --php-version="${{ inputs.php_version }}" --output-format=github --no-cache
-              ran=true
-            fi
-
             if [ "$ran" = false ]; then
-              echo "No static analysis configuration found."
+              echo "No PHPStan configuration found."
             fi
           }
 
@@ -316,10 +286,6 @@ jobs:
                 else
                   composer audit --no-interaction
                 fi
-              fi
-
-              if [ "$RUN_LINT" = "true" ]; then
-                lint_php
               fi
 
               if [ "$RUN_PHPCS" = "true" ]; then
