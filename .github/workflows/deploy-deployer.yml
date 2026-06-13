@@ -1,0 +1,224 @@
+name: Deploy with Deployer
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Deployer environment/stage.
+        type: string
+        required: true
+      verbosity:
+        description: Deployer verbosity without leading dash.
+        type: string
+        default: v
+        required: false
+      working_directory:
+        description: Repository directory to install before deployment.
+        type: string
+        default: .
+        required: false
+      deployment_directory:
+        description: Directory containing Deployer composer.json and deploy config.
+        type: string
+        default: deployment
+        required: false
+      deploy_command:
+        description: Command executed inside deployment_directory.
+        type: string
+        default: ./vendor/bin/dep deploy
+        required: false
+      php_version:
+        description: PHP version used for Composer and Deployer.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      php_tools:
+        description: Additional tools passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      node_version:
+        description: Node version used when package.json is present.
+        type: string
+        default: '24'
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      build_script:
+        description: Optional npm/yarn/pnpm build script before deployment.
+        type: string
+        default: build
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 30
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: SSH key used for deployment targets and private dependencies.
+        required: true
+      DEPLOY_HOSTNAME:
+        description: Host added to known_hosts before deployment.
+        required: false
+      DEPLOY_PORT:
+        description: SSH port for known_hosts.
+        required: false
+      DEPLOY_USER:
+        description: Deployer user exposed as DEPLOY_USER.
+        required: false
+      WIREGUARD_CONFIGURATION:
+        description: Optional wg-quick configuration.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      COMPOSER_NO_DEV: 1
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.GITHUB_USER_SSH_KEY }}
+
+      - name: Set up WireGuard
+        env:
+          WIREGUARD_CONFIGURATION: ${{ secrets.WIREGUARD_CONFIGURATION }}
+        if: ${{ env.WIREGUARD_CONFIGURATION != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools
+          printf '%s\n' "$WIREGUARD_CONFIGURATION" | sudo tee /etc/wireguard/wg0.conf >/dev/null
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Validate Composer metadata
+        working-directory: ${{ inputs.working_directory }}
+        run: composer validate --no-check-publish
+
+      - name: Install project dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction
+
+      - name: Detect package.json
+        id: node
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          test -f "$WD/package.json" && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Build Node assets
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm "$BUILD_SCRIPT"
+            elif [ -f yarn.lock ]; then
+              yarn "$BUILD_SCRIPT"
+            else
+              npm run "$BUILD_SCRIPT"
+            fi
+          fi
+
+      - name: Install deployment dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.deployment_directory }}
+          composer-options: --prefer-dist --no-progress --no-interaction
+
+      - name: Add deploy host to known_hosts
+        env:
+          DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        if: ${{ env.DEPLOY_HOSTNAME != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          ssh-keyscan -p "$port" "$DEPLOY_HOSTNAME" >> ~/.ssh/known_hosts
+
+      - name: Run Deployer
+        working-directory: ${{ inputs.deployment_directory }}
+        shell: bash
+        env:
+          DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_VERBOSITY: ${{ inputs.verbosity }}
+          DEPLOY_COMMAND: ${{ inputs.deploy_command }}
+        run: |
+          set -euo pipefail
+          bash -lc "$DEPLOY_COMMAND $DEPLOY_ENVIRONMENT -$DEPLOY_VERBOSITY"
+
+      - name: Stop WireGuard
+        if: ${{ always() }}
+        run: |
+          if [ -f /etc/wireguard/wg0.conf ]; then
+            sudo wg-quick down wg0 || true
+          fi
+

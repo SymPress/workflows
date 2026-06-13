@@ -1,0 +1,180 @@
+name: Automatic release
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version used for semantic-release.
+        type: string
+        default: '24'
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      release_config:
+        description: Release config path in the calling repository.
+        type: string
+        default: release.config.cjs
+        required: false
+      workflow_repository:
+        description: Repository containing fallback release templates.
+        type: string
+        default: sympress/reusable-workflows
+        required: false
+      workflow_ref:
+        description: Ref used when checking out fallback release templates.
+        type: string
+        default: main
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 10
+        required: false
+    secrets:
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      GITHUB_USER_EMAIL:
+        description: Git author email.
+        required: false
+      GITHUB_USER_NAME:
+        description: Git author name.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: Optional SSH key for git operations.
+        required: false
+      GITHUB_USER_SSH_PUBLIC_KEY:
+        description: Optional SSH public key for commit signing.
+        required: false
+      GITHUB_USER_TOKEN:
+        description: Token with release permissions. Falls back to GITHUB_TOKEN.
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  automatic-release:
+    name: Automatic release
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Configure SSH remote
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        run: git remote set-url origin "git@github.com:${{ github.repository }}.git"
+
+      - name: Configure HTTPS remote
+        env:
+          PUSH_TOKEN: ${{ secrets.GITHUB_USER_TOKEN }}
+        if: ${{ env.PUSH_TOKEN != '' }}
+        run: git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
+
+      - name: Configure Git author
+        shell: bash
+        env:
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        run: |
+          set -euo pipefail
+          git config user.email "${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+          git config user.name "${GIT_NAME:-github-actions[bot]}"
+
+      - name: Configure SSH commit signing
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.GITHUB_USER_SSH_PUBLIC_KEY }}
+        if: ${{ env.SSH_PUBLIC_KEY != '' }}
+        run: |
+          touch "${{ runner.temp }}/signingkey"
+          printf '%s\n' "$SSH_PUBLIC_KEY" > "${{ runner.temp }}/signingkey.pub"
+          git config commit.gpgsign true
+          git config gpg.format ssh
+          git config user.signingkey "${{ runner.temp }}/signingkey.pub"
+
+      - name: Detect release config
+        id: release-config
+        shell: bash
+        env:
+          RELEASE_CONFIG: ${{ inputs.release_config }}
+        run: |
+          set -euo pipefail
+          if [ -f "$RELEASE_CONFIG" ]; then
+            echo "has_config=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_config=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout workflow templates
+        if: ${{ steps.release-config.outputs.has_config == 'false' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.workflow_repository }}
+          ref: ${{ inputs.workflow_ref }}
+          path: .workflow-templates
+
+      - name: Install fallback release config
+        if: ${{ steps.release-config.outputs.has_config == 'false' }}
+        shell: bash
+        env:
+          RELEASE_CONFIG: ${{ inputs.release_config }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          cp .workflow-templates/templates/automatic-release/release.config.cjs "$RELEASE_CONFIG"
+          cp .workflow-templates/templates/automatic-release/update-version.cjs .release/update-version.cjs
+          rm -rf .workflow-templates
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install semantic-release
+        run: |
+          npm install --no-save \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/commit-analyzer \
+            @semantic-release/exec \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/npm \
+            @semantic-release/release-notes-generator \
+            conventional-changelog-conventionalcommits
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        run: npx semantic-release --ci --extends ./${{ inputs.release_config }}
+
+      - name: Remove signing files
+        if: ${{ always() }}
+        run: |
+          rm -f "${{ runner.temp }}/signingkey"
+          rm -f "${{ runner.temp }}/signingkey.pub"
+

@@ -1,0 +1,116 @@
+name: Composer validate and audit
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for Composer.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      working_directory:
+        description: Directory that contains composer.json.
+        type: string
+        default: .
+        required: false
+      install:
+        description: Install dependencies before validation and audit.
+        type: boolean
+        default: false
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      audit:
+        description: Run Composer audit.
+        type: boolean
+        default: true
+        required: false
+      validate_options:
+        description: Options passed to composer validate.
+        type: string
+        default: --strict --no-check-publish
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 5
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  composer-validate:
+    name: Composer validate and audit
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ inputs.install }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Validate composer.json
+        working-directory: ${{ inputs.working_directory }}
+        run: composer validate ${{ inputs.validate_options }}
+
+      - name: Audit Composer dependencies
+        if: ${{ inputs.audit }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f composer.lock ]; then
+            composer audit --locked --no-interaction
+          else
+            composer audit --no-interaction
+          fi
+

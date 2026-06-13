@@ -1,0 +1,16 @@
+name: QA
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@main
+    with:
+      php_version: '8.5'

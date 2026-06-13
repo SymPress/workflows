@@ -1,0 +1,150 @@
+name: PHP static analysis
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for static analysis.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      working_directory:
+        description: Directory that contains composer.json.
+        type: string
+        default: .
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      engine:
+        description: Static analyzer to run. Use auto, phpstan, psalm, or both.
+        type: string
+        default: auto
+        required: false
+      command:
+        description: Explicit command to run instead of auto-detecting analyzers.
+        type: string
+        default: ''
+        required: false
+      phpstan_args:
+        description: Arguments passed to PHPStan.
+        type: string
+        default: analyse --no-progress --memory-limit=1G
+        required: false
+      psalm_args:
+        description: Arguments passed to Psalm.
+        type: string
+        default: --output-format=github --no-cache
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 10
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  php-static-analysis:
+    name: PHP static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Run static analysis
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          ENGINE: ${{ inputs.engine }}
+          PHPSTAN_ARGS: ${{ inputs.phpstan_args }}
+          PSALM_ARGS: ${{ inputs.psalm_args }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$COMMAND" ]; then
+            bash -lc "$COMMAND"
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+cs:analyze[[:space:]]'; then
+            composer cs:analyze
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+static-analysis[[:space:]]'; then
+            composer static-analysis
+            exit 0
+          fi
+
+          bin_dir="$(composer config bin-dir)"
+          ran=false
+
+          if { [ "$ENGINE" = "auto" ] || [ "$ENGINE" = "phpstan" ] || [ "$ENGINE" = "both" ]; } \
+            && { [ -f phpstan.neon ] || [ -f phpstan.neon.dist ] || [ -f phpstan.dist.neon ]; }; then
+            # shellcheck disable=SC2086
+            "${bin_dir%/}/phpstan" $PHPSTAN_ARGS
+            ran=true
+          fi
+
+          if { [ "$ENGINE" = "auto" ] || [ "$ENGINE" = "psalm" ] || [ "$ENGINE" = "both" ]; } \
+            && { [ -f psalm.xml ] || [ -f psalm.xml.dist ]; }; then
+            # shellcheck disable=SC2086
+            "${bin_dir%/}/psalm" --php-version="${{ inputs.php_version }}" $PSALM_ARGS
+            ran=true
+          fi
+
+          if [ "$ran" = false ]; then
+            echo "No supported static analysis config found."
+          fi

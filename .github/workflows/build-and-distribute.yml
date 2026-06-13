@@ -1,0 +1,501 @@
+name: Build and distribute
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory that contains the package to build.
+        type: string
+        default: .
+        required: false
+      package_name:
+        description: Package and artifact name. Falls back to repository name.
+        type: string
+        default: ''
+        required: false
+      package_version:
+        description: Package version. Auto-generated from latest tag, branch, and SHA when empty.
+        type: string
+        default: ''
+        required: false
+      built_branch_name:
+        description: Target branch for compiled artifacts. Falls back to source branch without source_branch_prefix.
+        type: string
+        default: ''
+        required: false
+      source_branch_prefix:
+        description: Prefix stripped from source branches when deriving the build branch.
+        type: string
+        default: dev/
+        required: false
+      allow_same_branch:
+        description: Allow committing build artifacts to the same branch that triggered the workflow.
+        type: boolean
+        default: false
+        required: false
+      php_version:
+        description: PHP version used for Composer.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      php_tools:
+        description: Additional tools passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      node_version:
+        description: Node version used for frontend builds.
+        type: string
+        default: '24'
+        required: false
+      node_options:
+        description: NODE_OPTIONS value.
+        type: string
+        default: ''
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --no-dev --prefer-dist --optimize-autoloader --no-progress --no-interaction
+        required: false
+      build_script:
+        description: npm/yarn/pnpm build script to run.
+        type: string
+        default: build
+        required: false
+      run_asset_compiler:
+        description: Run Composer compile-assets if available.
+        type: boolean
+        default: true
+        required: false
+      asset_compiler_args:
+        description: Arguments passed to composer compile-assets.
+        type: string
+        default: -v --env=root
+        required: false
+      run_php_scoper:
+        description: Run PHP-Scoper when scoper.inc.php exists.
+        type: boolean
+        default: true
+        required: false
+      update_composer_version:
+        description: Write package_version to composer.json when present.
+        type: boolean
+        default: true
+        required: false
+      update_package_json_version:
+        description: Write package_version to package.json when present.
+        type: boolean
+        default: true
+        required: false
+      update_wordpress_headers:
+        description: Write package_version and SHA to plugin/theme headers when detected.
+        type: boolean
+        default: true
+        required: false
+      pre_script:
+        description: Shell code executed before build steps.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 20
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      GITHUB_USER_EMAIL:
+        description: Git author email.
+        required: false
+      GITHUB_USER_NAME:
+        description: Git author name.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: Optional SSH key used for checkout and push.
+        required: false
+      GITHUB_USER_TOKEN:
+        description: Optional token used for pushing the build branch.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+    outputs:
+      artifact:
+        description: Uploaded artifact name.
+        value: ${{ jobs.build-and-distribute.outputs.artifact }}
+      built_branch:
+        description: Branch that received the compiled build.
+        value: ${{ jobs.build-and-distribute.outputs.built_branch }}
+      package_version:
+        description: Version used for the build.
+        value: ${{ jobs.build-and-distribute.outputs.package_version }}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-distribute:
+    name: Build and distribute
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      artifact: ${{ steps.package.outputs.artifact }}
+      built_branch: ${{ steps.metadata.outputs.built_branch }}
+      package_version: ${{ steps.metadata.outputs.package_version }}
+    env:
+      COMPOSER_MIRROR_PATH_REPOS: 1
+      NODE_OPTIONS: ${{ inputs.node_options }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Start SSH agent
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Configure push remote
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+          PUSH_TOKEN: ${{ secrets.GITHUB_USER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SSH_KEY" ]; then
+            mkdir -p ~/.ssh
+            ssh-keyscan github.com >> ~/.ssh/known_hosts
+            git remote set-url origin "git@github.com:${{ github.repository }}.git"
+          elif [ -n "$PUSH_TOKEN" ]; then
+            git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
+          fi
+
+      - name: Configure Git author
+        shell: bash
+        env:
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        run: |
+          set -euo pipefail
+          git config user.email "${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+          git config user.name "${GIT_NAME:-github-actions[bot]}"
+          git config advice.addIgnoredFile false
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Determine build metadata
+        id: metadata
+        shell: bash
+        env:
+          INPUT_PACKAGE_VERSION: ${{ inputs.package_version }}
+          INPUT_BUILT_BRANCH: ${{ inputs.built_branch_name }}
+          SOURCE_BRANCH_PREFIX: ${{ inputs.source_branch_prefix }}
+          ALLOW_SAME_BRANCH: ${{ inputs.allow_same_branch }}
+        run: |
+          set -euo pipefail
+
+          source_branch="${GITHUB_REF_NAME}"
+          built_branch="$INPUT_BUILT_BRANCH"
+          if [ -z "$built_branch" ]; then
+            built_branch="${source_branch#"$SOURCE_BRANCH_PREFIX"}"
+          fi
+
+          if [ "$ALLOW_SAME_BRANCH" != "true" ] && [ "$source_branch" = "$built_branch" ]; then
+            echo "::error::Build branch equals source branch. Use a prefixed source branch or set allow_same_branch=true."
+            exit 1
+          fi
+
+          package_version="$INPUT_PACKAGE_VERSION"
+          if [ -z "$package_version" ]; then
+            latest_tag="$(git tag --sort=-v:refname | head -n 1 || true)"
+            base="${latest_tag#v}"
+            if [ -z "$base" ]; then
+              base="0.0.0"
+            fi
+            slug="$(echo "${source_branch#"$SOURCE_BRANCH_PREFIX"}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')"
+            if [ -z "$slug" ]; then
+              slug="build"
+            fi
+            short_sha="$(git rev-parse --short=8 HEAD)"
+            package_version="${base}-${slug}.${short_sha}"
+          fi
+
+          {
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "built_branch=$built_branch"
+            echo "package_version=$package_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout build branch
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --heads origin "$BUILT_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$BUILT_BRANCH"
+            git checkout -B "$BUILT_BRANCH" "origin/$BUILT_BRANCH"
+            git rm -rf . >/dev/null 2>&1 || true
+            git clean -ffdx
+          else
+            git checkout --orphan "$BUILT_BRANCH"
+            git rm -rf . >/dev/null 2>&1 || true
+            git clean -ffdx
+          fi
+
+          git checkout "$SOURCE_SHA" -- .
+
+      - name: Detect project files
+        id: detect
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          test -f "$WD/composer.json" && echo "has_composer=true" >> "$GITHUB_OUTPUT" || echo "has_composer=false" >> "$GITHUB_OUTPUT"
+          test -f "$WD/package.json" && echo "has_package_json=true" >> "$GITHUB_OUTPUT" || echo "has_package_json=false" >> "$GITHUB_OUTPUT"
+
+      - name: Set up PHP
+        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, php-scoper, ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Set up Node
+        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install Node dependencies
+        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Update versions
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.package_version }}
+          UPDATE_COMPOSER: ${{ inputs.update_composer_version }}
+          UPDATE_PACKAGE_JSON: ${{ inputs.update_package_json_version }}
+          UPDATE_WORDPRESS_HEADERS: ${{ inputs.update_wordpress_headers }}
+        run: |
+          set -euo pipefail
+
+          if [ "$UPDATE_COMPOSER" = "true" ] && [ -f composer.json ]; then
+            jq --arg version "$PACKAGE_VERSION" '.version = $version' composer.json > composer.json.tmp
+            mv composer.json.tmp composer.json
+          fi
+
+          if [ "$UPDATE_PACKAGE_JSON" = "true" ] && [ -f package.json ]; then
+            jq --arg version "$PACKAGE_VERSION" '.version = $version' package.json > package.json.tmp
+            mv package.json.tmp package.json
+          fi
+
+          if [ "$UPDATE_WORDPRESS_HEADERS" = "true" ]; then
+            main_file=""
+            if [ -f style.css ] && grep -q '^Theme Name:' style.css; then
+              main_file="style.css"
+            else
+              main_file="$(grep -rl --include='*.php' '^ \{0,\}\* \{0,\}Plugin Name:' . 2>/dev/null | head -n 1 || true)"
+              if [ -z "$main_file" ]; then
+                main_file="$(grep -rl --include='*.php' '^Plugin Name:' . 2>/dev/null | head -n 1 || true)"
+              fi
+            fi
+
+            if [ -n "$main_file" ] && [ -f "$main_file" ]; then
+              sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?Version:[[:space:]]*).*/\\1$PACKAGE_VERSION/" "$main_file"
+              if grep -Eq '^[[:space:]]*(\*[[:space:]]*)?SHA:' "$main_file"; then
+                sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1${{ github.sha }}/" "$main_file"
+              fi
+            fi
+          fi
+
+      - name: Execute pre script
+        if: ${{ inputs.pre_script != '' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: ${{ inputs.pre_script }}
+
+      - name: Run Composer asset compiler
+        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.run_asset_compiler }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          ASSET_COMPILER_ARGS: ${{ inputs.asset_compiler_args }}
+        run: |
+          set -euo pipefail
+          if composer run-script --list | grep -Eq '^[[:space:]]+compile-assets[[:space:]]'; then
+            # shellcheck disable=SC2086
+            composer compile-assets $ASSET_COMPILER_ARGS
+          else
+            echo "Composer compile-assets script not found."
+          fi
+
+      - name: Run Node build
+        if: ${{ steps.detect.outputs.has_package_json == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          set -euo pipefail
+          if ! node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
+            echo "No $BUILD_SCRIPT script found."
+            exit 0
+          fi
+
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm "$BUILD_SCRIPT"
+          elif [ -f yarn.lock ]; then
+            yarn "$BUILD_SCRIPT"
+          else
+            npm run "$BUILD_SCRIPT"
+          fi
+
+      - name: Run PHP-Scoper
+        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.run_php_scoper }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f scoper.inc.php ]; then
+            echo "No scoper.inc.php found."
+            exit 0
+          fi
+
+          php-scoper add-prefix --force --output-dir=.scoped-build
+          composer --working-dir=.scoped-build dump-autoload -o
+          if [ -f ".scoped-build/vendor/composer/autoload_real.php" ]; then
+            sed -i "s/'__composer_autoload_files'/\'__composer_autoload_files_${{ github.sha }}'/g" ".scoped-build/vendor/composer/autoload_real.php"
+          fi
+          rsync -a .scoped-build/ ./
+          rm -rf .scoped-build
+
+      - name: Prepare artifact
+        id: package
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          INPUT_PACKAGE_NAME: ${{ inputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+          package_name="${INPUT_PACKAGE_NAME:-${{ github.event.repository.name }}}"
+          artifact="${package_name}-${PACKAGE_VERSION}"
+
+          rm -rf .artifact
+          mkdir -p ".artifact/$package_name"
+
+          rsync_args=(
+            -a
+            --delete
+            --exclude='.git'
+            --exclude='.github'
+            --exclude='.ddev'
+            --exclude='.artifact'
+            --exclude='node_modules'
+            --exclude='.phpunit.cache'
+            --exclude='var/cache'
+          )
+
+          if [ -f .distignore ]; then
+            rsync_args+=(--exclude-from=.distignore)
+          fi
+
+          rsync "${rsync_args[@]}" ./ ".artifact/$package_name/"
+
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Commit build branch
+        shell: bash
+        env:
+          BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No build branch changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Build artifact ${PACKAGE_VERSION} from ${GITHUB_REF_NAME}" --no-verify
+          git push origin "HEAD:${BUILT_BRANCH}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: ${{ format('{0}/.artifact/*', inputs.working_directory) }}
+          include-hidden-files: true
+          compression-level: 9

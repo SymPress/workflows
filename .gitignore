@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+vendor/
+.phpunit.cache/
+.php-cs-fixer.cache
+coverage/
+dist/
+build/
+artifacts/
+playwright-report/
+test-results/
+*.log
+*.zip
+

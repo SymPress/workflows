@@ -1,0 +1,254 @@
+name: DDEV Playwright
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: Optional PHP version to set in DDEV before start.
+        type: string
+        default: ''
+        required: false
+      node_version:
+        description: Optional Node version to set in DDEV before start.
+        type: string
+        default: ''
+        required: false
+      ddev_start_command:
+        description: Command used to start DDEV.
+        type: string
+        default: ddev start
+        required: false
+      setup_command:
+        description: Optional project setup command after DDEV starts.
+        type: string
+        default: ''
+        required: false
+      playwright_install_command:
+        description: Command that installs Playwright dependencies.
+        type: string
+        default: ddev exec npm install && npx playwright install --with-deps
+        required: false
+      playwright_run_command:
+        description: Command that runs Playwright tests.
+        type: string
+        default: npx playwright test
+        required: false
+      playwright_artifact_name:
+        description: Artifact name.
+        type: string
+        default: ddev-playwright-report
+        required: false
+      playwright_artifact_path:
+        description: Repository-root artifact paths to upload.
+        type: string
+        default: |
+          playwright-report/
+          test-results/
+          tests/Playwright/playwright-report/
+          tests/Playwright/test-results/
+        required: false
+      ngrok_start_command:
+        description: Optional command that starts an ngrok tunnel.
+        type: string
+        default: ''
+        required: false
+      baseurl_env_name:
+        description: Environment variable name updated with ngrok URL.
+        type: string
+        default: BASEURL
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 45
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON exposed to DDEV as auth.json.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token exposed through .npmrc.
+        required: false
+      NGROK_AUTH_TOKEN:
+        description: Optional ngrok token.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of host {name,value} variables to export.
+        required: false
+      DDEV_ENV_VARS:
+        description: JSON object or array of variables added to DDEV web environment.
+        required: false
+      SSH_KEY:
+        description: Optional SSH key mounted into DDEV home additions.
+        required: false
+      SSH_KNOWN_HOSTS:
+        description: Optional known_hosts contents mounted into DDEV.
+        required: false
+    outputs:
+      artifact:
+        description: Uploaded artifact name.
+        value: ${{ jobs.ddev-playwright.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  ddev-playwright:
+    name: DDEV Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      artifact: ${{ steps.artifact.outputs.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export host environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Configure DDEV SSH key
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        if: ${{ env.SSH_KEY != '' }}
+        run: |
+          mkdir -p .ddev/homeadditions/.ssh
+          printf '%s\n' "$SSH_KEY" > .ddev/homeadditions/.ssh/id_rsa
+          printf '%s\n' "StrictHostKeyChecking=accept-new" "CheckHostIP=no" "HashKnownHosts=no" > .ddev/homeadditions/.ssh/config
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > .ddev/homeadditions/.ssh/known_hosts
+          fi
+          chmod 700 .ddev/homeadditions/.ssh
+          chmod 600 .ddev/homeadditions/.ssh/id_rsa .ddev/homeadditions/.ssh/config
+
+      - name: Set up DDEV
+        uses: ddev/github-action-setup-ddev@v1
+        with:
+          autostart: false
+
+      - name: Configure DDEV
+        shell: bash
+        env:
+          PHP_VERSION: ${{ inputs.php_version }}
+          NODE_VERSION: ${{ inputs.node_version }}
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+          NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          ddev config --web-environment-add="CI=true"
+          if [ -n "$PHP_VERSION" ]; then
+            ddev config --php-version "$PHP_VERSION"
+          fi
+          if [ -n "$NODE_VERSION" ]; then
+            ddev config --nodejs-version "$NODE_VERSION"
+          fi
+          if [ -n "$COMPOSER_AUTH" ]; then
+            printf '%s\n' "$COMPOSER_AUTH" > auth.json
+          fi
+          if [ -n "$NPM_TOKEN" ]; then
+            {
+              echo "//npm.pkg.github.com/:_authToken=$NPM_TOKEN"
+              echo "@sympress:registry=https://npm.pkg.github.com/"
+            } > .npmrc
+          fi
+
+      - name: Add DDEV environment variables
+        env:
+          DDEV_ENV_VARS_JSON: ${{ secrets.DDEV_ENV_VARS }}
+        if: ${{ env.DDEV_ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.DDEV_ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              await exec.exec('ddev', ['config', `--web-environment-add=${item.name}=${item.value}`]);
+            }
+
+      - name: Start DDEV
+        run: ${{ inputs.ddev_start_command }}
+
+      - name: Run setup command
+        if: ${{ inputs.setup_command != '' }}
+        run: ${{ inputs.setup_command }}
+
+      - name: Install ngrok
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        if: ${{ env.NGROK_AUTH_TOKEN != '' }}
+        run: |
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+            | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update
+          sudo apt-get install -y ngrok
+          ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+
+      - name: Install Playwright
+        run: ${{ inputs.playwright_install_command }}
+
+      - name: Start ngrok command
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        if: ${{ env.NGROK_AUTH_TOKEN != '' && inputs.ngrok_start_command != '' }}
+        run: ${{ inputs.ngrok_start_command }}
+
+      - name: Export ngrok URL
+        shell: bash
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          BASEURL_ENV_NAME: ${{ inputs.baseurl_env_name }}
+        if: ${{ env.NGROK_AUTH_TOKEN != '' && inputs.ngrok_start_command != '' }}
+        run: |
+          set -euo pipefail
+          url="$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https") | .public_url' | head -n 1)"
+          if [ -n "$url" ]; then
+            echo "${BASEURL_ENV_NAME}=$url" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run Playwright
+        id: run-playwright
+        continue-on-error: true
+        run: ${{ inputs.playwright_run_command }}
+
+      - name: Set artifact name
+        id: artifact
+        run: echo "name=${{ inputs.playwright_artifact_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Playwright artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.playwright_artifact_name }}
+          path: ${{ inputs.playwright_artifact_path }}
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+      - name: Stop DDEV
+        if: ${{ always() }}
+        run: ddev stop --unlist || true
+
+      - name: Fail on test errors
+        if: ${{ steps.run-playwright.outcome == 'failure' }}
+        run: exit 1

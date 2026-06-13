@@ -1,0 +1,165 @@
+name: WordPress scripts lint
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version used for linting.
+        type: string
+        default: '24'
+        required: false
+      node_options:
+        description: NODE_OPTIONS value.
+        type: string
+        default: ''
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      working_directory:
+        description: Directory that contains package.json.
+        type: string
+        default: .
+        required: false
+      lint_tools:
+        description: JSON array containing js, style, md-docs, and/or pkg-json.
+        type: string
+        default: '["js","style","md-docs"]'
+        required: false
+      eslint_args:
+        description: Arguments passed to wp-scripts lint-js.
+        type: string
+        default: ''
+        required: false
+      stylelint_args:
+        description: Arguments passed to wp-scripts lint-style.
+        type: string
+        default: ''
+        required: false
+      markdownlint_args:
+        description: Arguments passed to wp-scripts lint-md-docs.
+        type: string
+        default: ''
+        required: false
+      package_jsonlint_args:
+        description: Arguments passed to wp-scripts lint-pkg-json.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 8
+        required: false
+    secrets:
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      GITHUB_USER_EMAIL:
+        description: Git user email for private package setups.
+        required: false
+      GITHUB_USER_NAME:
+        description: Git user name for private package setups.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: SSH key for private package setups.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  wp-scripts-lint:
+    name: WordPress scripts lint
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      NODE_OPTIONS: ${{ inputs.node_options }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Set up Git
+        env:
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        if: ${{ env.GIT_EMAIL != '' && env.GIT_NAME != '' }}
+        run: |
+          git config --global user.email "$GIT_EMAIL"
+          git config --global user.name "$GIT_NAME"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint JavaScript
+        if: ${{ contains(fromJSON(inputs.lint_tools), 'js') }}
+        working-directory: ${{ inputs.working_directory }}
+        run: ./node_modules/.bin/wp-scripts lint-js ${{ inputs.eslint_args }}
+
+      - name: Lint styles
+        if: ${{ contains(fromJSON(inputs.lint_tools), 'style') }}
+        working-directory: ${{ inputs.working_directory }}
+        run: ./node_modules/.bin/wp-scripts lint-style ${{ inputs.stylelint_args }} --formatter github
+
+      - name: Lint Markdown
+        if: ${{ contains(fromJSON(inputs.lint_tools), 'md-docs') }}
+        working-directory: ${{ inputs.working_directory }}
+        run: ./node_modules/.bin/wp-scripts lint-md-docs ${{ inputs.markdownlint_args }}
+
+      - name: Lint package.json
+        if: ${{ contains(fromJSON(inputs.lint_tools), 'pkg-json') }}
+        working-directory: ${{ inputs.working_directory }}
+        run: ./node_modules/.bin/wp-scripts lint-pkg-json ${{ inputs.package_jsonlint_args }}
+

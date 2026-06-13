@@ -1,0 +1,26 @@
+name: Lint GitHub Actions workflows
+
+on:
+  workflow_call:
+    inputs:
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 5
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1
+

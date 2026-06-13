@@ -1,0 +1,221 @@
+name: Build assets
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory that contains composer.json and/or package.json.
+        type: string
+        default: .
+        required: false
+      php_version:
+        description: PHP version used for Composer asset builds.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      node_version:
+        description: Node version used for npm/yarn/pnpm builds.
+        type: string
+        default: '24'
+        required: false
+      node_options:
+        description: NODE_OPTIONS value.
+        type: string
+        default: ''
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      composer_install:
+        description: Install Composer dependencies before building.
+        type: boolean
+        default: true
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      run_asset_compiler:
+        description: Run Composer compile-assets if available.
+        type: boolean
+        default: true
+        required: false
+      asset_compiler_args:
+        description: Arguments passed to composer compile-assets.
+        type: string
+        default: -v --env=root
+        required: false
+      run_node_build:
+        description: Run the package build script if package.json exists.
+        type: boolean
+        default: true
+        required: false
+      build_script:
+        description: npm/yarn/pnpm script to run.
+        type: string
+        default: build
+        required: false
+      artifact_name:
+        description: Optional artifact name to upload after building.
+        type: string
+        default: ''
+        required: false
+      artifact_path:
+        description: Optional artifact path to upload after building.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 15
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  assets-build:
+    name: Build assets
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      NODE_OPTIONS: ${{ inputs.node_options }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect project files
+        id: detect
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          test -f "$WD/composer.json" && echo "has_composer=true" >> "$GITHUB_OUTPUT" || echo "has_composer=false" >> "$GITHUB_OUTPUT"
+          test -f "$WD/package.json" && echo "has_package_json=true" >> "$GITHUB_OUTPUT" || echo "has_package_json=false" >> "$GITHUB_OUTPUT"
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.composer_install }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Set up Node
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install Node dependencies
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run Composer asset compiler
+        if: ${{ steps.detect.outputs.has_composer == 'true' && inputs.run_asset_compiler }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          ASSET_COMPILER_ARGS: ${{ inputs.asset_compiler_args }}
+        run: |
+          set -euo pipefail
+          if composer run-script --list | grep -Eq '^[[:space:]]+compile-assets[[:space:]]'; then
+            # shellcheck disable=SC2086
+            composer compile-assets $ASSET_COMPILER_ARGS
+          else
+            echo "Composer compile-assets script not found."
+          fi
+
+      - name: Run Node build
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          set -euo pipefail
+          if ! node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
+            echo "No $BUILD_SCRIPT script found."
+            exit 0
+          fi
+
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm "$BUILD_SCRIPT"
+          elif [ -f yarn.lock ]; then
+            yarn "$BUILD_SCRIPT"
+          else
+            npm run "$BUILD_SCRIPT"
+          fi
+
+      - name: Upload build artifact
+        if: ${{ inputs.artifact_name != '' && inputs.artifact_path != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ format('{0}/{1}', inputs.working_directory, inputs.artifact_path) }}
+          if-no-files-found: error
+          include-hidden-files: true

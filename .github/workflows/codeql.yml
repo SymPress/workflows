@@ -1,0 +1,43 @@
+name: CodeQL
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: Comma-separated CodeQL language list.
+        type: string
+        default: php
+        required: false
+      build_mode:
+        description: CodeQL build mode.
+        type: string
+        default: none
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 15
+        required: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.languages }}
+          build-mode: ${{ inputs.build_mode }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+

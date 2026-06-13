@@ -1,0 +1,162 @@
+name: JavaScript static analysis
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: Node version used for static analysis.
+        type: string
+        default: '24'
+        required: false
+      node_options:
+        description: NODE_OPTIONS value.
+        type: string
+        default: ''
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      working_directory:
+        description: Directory that contains package.json.
+        type: string
+        default: .
+        required: false
+      command:
+        description: Explicit command to run instead of auto-detecting a script.
+        type: string
+        default: ''
+        required: false
+      script:
+        description: Preferred package script for static analysis.
+        type: string
+        default: typecheck
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 8
+        required: false
+    secrets:
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      GITHUB_USER_EMAIL:
+        description: Git user email for private package setups.
+        required: false
+      GITHUB_USER_NAME:
+        description: Git user name for private package setups.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: SSH key for private package setups.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  javascript-static-analysis:
+    name: JavaScript static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      NODE_OPTIONS: ${{ inputs.node_options }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Set up Git
+        env:
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        if: ${{ env.GIT_EMAIL != '' && env.GIT_NAME != '' }}
+        run: |
+          git config --global user.email "$GIT_EMAIL"
+          git config --global user.name "$GIT_NAME"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run static analysis
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$COMMAND" ]; then
+            bash -lc "$COMMAND"
+            exit 0
+          fi
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.SCRIPT] ? 0 : 1)"; then
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm "$SCRIPT"
+            elif [ -f yarn.lock ]; then
+              yarn "$SCRIPT"
+            else
+              npm run "$SCRIPT"
+            fi
+            exit 0
+          fi
+
+          if [ -x node_modules/.bin/tsc ]; then
+            ./node_modules/.bin/tsc --noEmit --skipLibCheck --pretty false
+            exit 0
+          fi
+
+          echo "No static analysis script or TypeScript binary found."
+

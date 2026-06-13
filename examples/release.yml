@@ -1,0 +1,19 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+      - alpha
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    uses: sympress/reusable-workflows/.github/workflows/automatic-release.yml@main
+    secrets:
+      GITHUB_USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}

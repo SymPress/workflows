@@ -1,0 +1,343 @@
+name: Playwright
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory that contains package.json.
+        type: string
+        default: .
+        required: false
+      node_version:
+        description: Node version used for Playwright.
+        type: string
+        default: '24'
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      composer_deps_install:
+        description: Install Composer dependencies before tests.
+        type: boolean
+        default: false
+        required: false
+      php_version:
+        description: PHP version used for Composer.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      playwright_browser_args:
+        description: Arguments passed to npx playwright install.
+        type: string
+        default: --with-deps
+        required: false
+      playwright_script:
+        description: npm/yarn/pnpm script to run. Falls back to npx playwright test.
+        type: string
+        default: test:e2e
+        required: false
+      playwright_artifact_name:
+        description: Artifact name.
+        type: string
+        default: playwright-report
+        required: false
+      playwright_artifact_path:
+        description: Repository-root artifact paths to upload.
+        type: string
+        default: |
+          playwright-report/
+          test-results/
+        required: false
+      playwright_artifact_retention_days:
+        description: Artifact retention in days.
+        type: number
+        default: 30
+        required: false
+      playwright_artifact_include_hidden_files:
+        description: Include hidden files in artifact upload.
+        type: boolean
+        default: false
+        required: false
+      ngrok_domain:
+        description: Optional reserved ngrok domain.
+        type: string
+        default: ''
+        required: false
+      pre_script:
+        description: Shell code executed before the test command.
+        type: string
+        default: ''
+        required: false
+      testrail_plan_id:
+        description: Optional TestRail plan ID appended to .env.ci.
+        type: string
+        default: ''
+        required: false
+      testrail_run_id:
+        description: Optional TestRail run ID appended to .env.ci.
+        type: string
+        default: ''
+        required: false
+      xray_test_exec_key:
+        description: Optional Xray test execution key appended to .env.ci.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 120
+        required: false
+    secrets:
+      ENV_FILE_DATA:
+        description: Contents written to .env.ci before tests.
+        required: false
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      GITHUB_USER_EMAIL:
+        description: Git author email.
+        required: false
+      GITHUB_USER_NAME:
+        description: Git author name.
+        required: false
+      GITHUB_USER_SSH_KEY:
+        description: SSH key for private dependencies.
+        required: false
+      NGROK_AUTH_TOKEN:
+        description: Optional ngrok token.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    name: Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Configure Git author
+        env:
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        if: ${{ env.GIT_EMAIL != '' && env.GIT_NAME != '' }}
+        run: |
+          git config --global user.email "$GIT_EMAIL"
+          git config --global user.name "$GIT_NAME"
+
+      - name: Set up PHP
+        if: ${{ inputs.composer_deps_install }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ inputs.composer_deps_install }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: --prefer-dist --no-progress --no-interaction
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install Node dependencies
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build assets
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.build ? 0 : 1)"; then
+            echo "No build script found."
+            exit 0
+          fi
+
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm build
+          elif [ -f yarn.lock ]; then
+            yarn build
+          else
+            npm run build
+          fi
+
+      - name: Install Playwright browsers
+        working-directory: ${{ inputs.working_directory }}
+        run: npx playwright install ${{ inputs.playwright_browser_args }}
+
+      - name: Create environment file
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          ENV_FILE_DATA: ${{ secrets.ENV_FILE_DATA }}
+          TESTRAIL_PLAN_ID: ${{ inputs.testrail_plan_id }}
+          TESTRAIL_RUN_ID: ${{ inputs.testrail_run_id }}
+          XRAY_TEST_EXEC_KEY: ${{ inputs.xray_test_exec_key }}
+        run: |
+          printf '%s\n' "$ENV_FILE_DATA" > .env.ci
+          [ -n "$TESTRAIL_PLAN_ID" ] && echo "TESTRAIL_PLAN_ID=$TESTRAIL_PLAN_ID" >> .env.ci
+          [ -n "$TESTRAIL_RUN_ID" ] && echo "TESTRAIL_RUN_ID=$TESTRAIL_RUN_ID" >> .env.ci
+          [ -n "$XRAY_TEST_EXEC_KEY" ] && echo "XRAY_TEST_EXEC_KEY=$XRAY_TEST_EXEC_KEY" >> .env.ci
+
+      - name: Boot wp-env
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .wp-env.json ]; then
+            echo "No .wp-env.json found."
+            exit 0
+          fi
+
+          set -a
+          source .env.ci || true
+          set +a
+
+          wp_home="$(node -e "const c = require('./.wp-env.json'); console.log(c.config?.WP_HOME || '')")"
+          if [ -n "$wp_home" ]; then
+            domain="$(echo "$wp_home" | sed -E 's|https?://||; s|[:/].*||')"
+            if [ -n "$domain" ] && [ "$domain" != "localhost" ]; then
+              echo "127.0.0.1 $domain" | sudo tee -a /etc/hosts
+            fi
+          fi
+
+          npx wp-env start
+
+      - name: Install ngrok
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        if: ${{ env.NGROK_AUTH_TOKEN != '' }}
+        run: |
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+            | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update
+          sudo apt-get install -y ngrok
+
+      - name: Start ngrok
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          NGROK_DOMAIN: ${{ inputs.ngrok_domain }}
+        if: ${{ env.NGROK_AUTH_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
+          domain_flag=""
+          if [ -n "$NGROK_DOMAIN" ]; then
+            domain_flag="--domain=$NGROK_DOMAIN"
+          fi
+          # shellcheck disable=SC2086
+          ngrok http 80 $domain_flag --log=stdout --log-level=info > /tmp/ngrok.log 2>&1 &
+          sleep 3
+          ngrok_url="$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https") | .public_url' | head -n 1)"
+          if [ -z "$ngrok_url" ]; then
+            cat /tmp/ngrok.log
+            exit 1
+          fi
+          echo "NGROK_URL=$ngrok_url" >> "$GITHUB_ENV"
+          if [ -f .env.ci ]; then
+            grep -q '^WP_BASE_URL=' .env.ci && sed -i "s|^WP_BASE_URL=.*|WP_BASE_URL=$ngrok_url|" .env.ci || echo "WP_BASE_URL=$ngrok_url" >> .env.ci
+          fi
+
+      - name: Execute pre script
+        if: ${{ inputs.pre_script != '' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          set -a
+          source .env.ci || true
+          set +a
+          ${{ inputs.pre_script }}
+
+      - name: Run Playwright
+        id: run-playwright
+        continue-on-error: true
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          PLAYWRIGHT_SCRIPT: ${{ inputs.playwright_script }}
+        run: |
+          set -euo pipefail
+          trap 'rm -f .env.ci' EXIT
+          set -a
+          source .env.ci || true
+          set +a
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.PLAYWRIGHT_SCRIPT] ? 0 : 1)"; then
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm "$PLAYWRIGHT_SCRIPT"
+            elif [ -f yarn.lock ]; then
+              yarn "$PLAYWRIGHT_SCRIPT"
+            else
+              npm run "$PLAYWRIGHT_SCRIPT"
+            fi
+          else
+            npx playwright test
+          fi
+
+      - name: Upload Playwright artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.playwright_artifact_name }}
+          path: ${{ inputs.playwright_artifact_path }}
+          include-hidden-files: ${{ inputs.playwright_artifact_include_hidden_files }}
+          retention-days: ${{ inputs.playwright_artifact_retention_days }}
+          if-no-files-found: ignore
+
+      - name: Fail on test errors
+        if: ${{ steps.run-playwright.outcome == 'failure' }}
+        run: exit 1

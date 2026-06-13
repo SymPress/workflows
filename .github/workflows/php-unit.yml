@@ -1,0 +1,147 @@
+name: PHP unit tests
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for PHPUnit.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      working_directory:
+        description: Directory that contains composer.json.
+        type: string
+        default: .
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      coverage:
+        description: Coverage driver passed to setup-php.
+        type: string
+        default: none
+        required: false
+      command:
+        description: Explicit command to run instead of auto-detecting PHPUnit.
+        type: string
+        default: ''
+        required: false
+      phpunit_args:
+        description: Arguments passed to PHPUnit when no Composer script is found.
+        type: string
+        default: --no-coverage
+        required: false
+      junit_artifact:
+        description: Upload JUnit output if junit.xml exists.
+        type: boolean
+        default: true
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 10
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  php-unit:
+    name: PHP unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: ${{ inputs.coverage }}
+
+      - name: Add PHPUnit problem matcher
+        run: echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Run PHPUnit
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          PHPUNIT_ARGS: ${{ inputs.phpunit_args }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$COMMAND" ]; then
+            bash -lc "$COMMAND"
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+test:unit[[:space:]]'; then
+            composer test:unit
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+test[[:space:]]'; then
+            composer test
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+tests[[:space:]]'; then
+            composer tests
+            exit 0
+          fi
+
+          bin_dir="$(composer config bin-dir)"
+          # shellcheck disable=SC2086
+          "${bin_dir%/}/phpunit" $PHPUNIT_ARGS
+
+      - name: Upload JUnit report
+        if: ${{ always() && inputs.junit_artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpunit-junit
+          path: ${{ format('{0}/junit.xml', inputs.working_directory) }}
+          if-no-files-found: ignore

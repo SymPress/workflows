@@ -1,0 +1,131 @@
+name: PHP lint
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for syntax linting.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      php_tools:
+        description: Tools passed to shivammathur/setup-php.
+        type: string
+        default: composer:v2
+        required: false
+      working_directory:
+        description: Directory that contains the package to lint.
+        type: string
+        default: .
+        required: false
+      composer_install:
+        description: Install Composer dependencies before linting.
+        type: boolean
+        default: false
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      lint_paths:
+        description: Space-separated paths to scan for PHP files.
+        type: string
+        default: .
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 5
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    name: PHP lint
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ inputs.composer_install }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Lint PHP files
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          LINT_PATHS: ${{ inputs.lint_paths }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          tmp_file="$(mktemp)"
+          for path in ${LINT_PATHS}; do
+            if [ -d "$path" ]; then
+              find "$path" \
+                -type f \
+                -name '*.php' \
+                ! -path '*/vendor/*' \
+                ! -path '*/node_modules/*' \
+                ! -path '*/var/cache/*' \
+                -print0 >> "$tmp_file"
+            elif [ -f "$path" ]; then
+              printf '%s\0' "$path" >> "$tmp_file"
+            fi
+          done
+
+          if [ ! -s "$tmp_file" ]; then
+            echo "No PHP files found."
+            exit 0
+          fi
+
+          xargs -0 -n 1 -P "$(nproc)" php -l < "$tmp_file"
+

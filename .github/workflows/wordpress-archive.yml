@@ -1,0 +1,282 @@
+name: WordPress archive
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory that contains the plugin or theme.
+        type: string
+        default: .
+        required: false
+      php_version:
+        description: PHP version used for Composer.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      node_version:
+        description: Node version used for frontend builds.
+        type: string
+        default: '24'
+        required: false
+      npm_registry_domain:
+        description: npm registry URL.
+        type: string
+        default: https://npm.pkg.github.com/
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --no-dev --prefer-dist --optimize-autoloader --no-progress --no-interaction
+        required: false
+      package_name:
+        description: Artifact name. Falls back to the repository name.
+        type: string
+        default: ''
+        required: false
+      package_folder:
+        description: Folder name inside the artifact. Falls back to package_name.
+        type: string
+        default: ''
+        required: false
+      package_version:
+        description: Optional version written to plugin/theme headers.
+        type: string
+        default: ''
+        required: false
+      main_file:
+        description: Main plugin file or theme style.css. Auto-detected when empty.
+        type: string
+        default: ''
+        required: false
+      run_node_build:
+        description: Run package build script when package.json exists.
+        type: boolean
+        default: true
+        required: false
+      build_script:
+        description: npm/yarn/pnpm script to run.
+        type: string
+        default: build
+        required: false
+      pre_script:
+        description: Shell code executed before staging the archive.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 15
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      NPM_REGISTRY_TOKEN:
+        description: npm registry token.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+    outputs:
+      artifact:
+        description: Uploaded artifact name.
+        value: ${{ jobs.wordpress-archive.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  wordpress-archive:
+    name: WordPress archive
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      artifact: ${{ steps.package.outputs.artifact }}
+    env:
+      COMPOSER_MIRROR_PATH_REPOS: 1
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect project files
+        id: detect
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          test -f "$WD/composer.json" && echo "has_composer=true" >> "$GITHUB_OUTPUT" || echo "has_composer=false" >> "$GITHUB_OUTPUT"
+          test -f "$WD/package.json" && echo "has_package_json=true" >> "$GITHUB_OUTPUT" || echo "has_package_json=false" >> "$GITHUB_OUTPUT"
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Composer dependencies
+        if: ${{ steps.detect.outputs.has_composer == 'true' }}
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Set up Node
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Install Node dependencies
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable || yarn install --frozen-lockfile
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run Node build
+        if: ${{ steps.detect.outputs.has_package_json == 'true' && inputs.run_node_build }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          set -euo pipefail
+          if ! node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
+            echo "No $BUILD_SCRIPT script found."
+            exit 0
+          fi
+
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm "$BUILD_SCRIPT"
+          elif [ -f yarn.lock ]; then
+            yarn "$BUILD_SCRIPT"
+          else
+            npm run "$BUILD_SCRIPT"
+          fi
+
+      - name: Execute pre script
+        if: ${{ inputs.pre_script != '' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: ${{ inputs.pre_script }}
+
+      - name: Prepare package metadata
+        id: package
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          INPUT_PACKAGE_NAME: ${{ inputs.package_name }}
+          INPUT_PACKAGE_FOLDER: ${{ inputs.package_folder }}
+          INPUT_MAIN_FILE: ${{ inputs.main_file }}
+          PACKAGE_VERSION: ${{ inputs.package_version }}
+        run: |
+          set -euo pipefail
+
+          package_name="${INPUT_PACKAGE_NAME:-${{ github.event.repository.name }}}"
+          package_folder="${INPUT_PACKAGE_FOLDER:-$package_name}"
+          main_file="$INPUT_MAIN_FILE"
+
+          if [ -z "$main_file" ]; then
+            if [ -f style.css ] && grep -q '^Theme Name:' style.css; then
+              main_file="style.css"
+            else
+              main_file="$(grep -rl --include='*.php' '^ \{0,\}\* \{0,\}Plugin Name:' . 2>/dev/null | head -n 1 || true)"
+              if [ -z "$main_file" ]; then
+                main_file="$(grep -rl --include='*.php' '^Plugin Name:' . 2>/dev/null | head -n 1 || true)"
+              fi
+            fi
+          fi
+
+          if [ -n "$PACKAGE_VERSION" ] && [ -n "$main_file" ] && [ -f "$main_file" ]; then
+            sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?Version:[[:space:]]*).*/\\1$PACKAGE_VERSION/" "$main_file"
+            if grep -Eq '^[[:space:]]*(\*[[:space:]]*)?SHA:' "$main_file"; then
+              sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1${{ github.sha }}/" "$main_file"
+            fi
+          fi
+
+          artifact="${package_name}${PACKAGE_VERSION:+-$PACKAGE_VERSION}"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          echo "folder=$package_folder" >> "$GITHUB_OUTPUT"
+
+      - name: Stage archive
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          PACKAGE_FOLDER: ${{ steps.package.outputs.folder }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+          rm -rf .dist
+          mkdir -p ".dist/$PACKAGE_FOLDER"
+
+          rsync_args=(
+            -a
+            --delete
+            --exclude='.git'
+            --exclude='.github'
+            --exclude='.ddev'
+            --exclude='.dist'
+            --exclude='node_modules'
+            --exclude='.phpunit.cache'
+            --exclude='var/cache'
+          )
+
+          if [ -f .distignore ]; then
+            rsync_args+=(--exclude-from=.distignore)
+          fi
+
+          rsync "${rsync_args[@]}" ./ ".dist/$PACKAGE_FOLDER/"
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: ${{ format('{0}/.dist/*', inputs.working_directory) }}
+          include-hidden-files: true
+          compression-level: 9
+

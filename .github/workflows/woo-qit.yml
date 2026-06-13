@@ -1,0 +1,81 @@
+name: WooCommerce QIT
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: Artifact produced by wordpress-archive or build-and-distribute.
+        type: string
+        required: true
+      plugin_folder_name:
+        description: Plugin folder/slug. Falls back to the repository name.
+        type: string
+        default: ''
+        required: false
+      qit_test:
+        description: QIT test to run.
+        type: string
+        default: activation
+        required: false
+      qit_options:
+        description: Additional QIT options.
+        type: string
+        default: ''
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 10
+        required: false
+    secrets:
+      WOO_PARTNER_USER:
+        description: Woo.com partner email.
+        required: true
+      WOO_PARTNER_SECRET:
+        description: Woo.com QIT token.
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  woo-qit:
+    name: WooCommerce QIT
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      WOO_PARTNER_USER: ${{ secrets.WOO_PARTNER_USER }}
+      WOO_PARTNER_SECRET: ${{ secrets.WOO_PARTNER_SECRET }}
+      QIT_DISABLE_ONBOARDING: yes
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: package
+
+      - name: Prepare plugin data
+        id: plugin
+        shell: bash
+        env:
+          INPUT_PLUGIN_FOLDER: ${{ inputs.plugin_folder_name }}
+        run: |
+          plugin_folder="${INPUT_PLUGIN_FOLDER:-${{ github.event.repository.name }}}"
+          echo "folder=$plugin_folder" >> "$GITHUB_OUTPUT"
+
+      - name: Zip artifact
+        working-directory: package
+        run: zip -r ../plugin.zip .
+
+      - name: Install QIT
+        run: |
+          curl -fsSL https://github.com/woocommerce/qit-cli/raw/trunk/qit -o qit
+          chmod +x qit
+
+      - name: Add QIT auth
+        run: ./qit partner:add --user="$WOO_PARTNER_USER" --qit_token="$WOO_PARTNER_SECRET"
+
+      - name: Run QIT
+        run: ./qit run:${{ inputs.qit_test }} ${{ steps.plugin.outputs.folder }} --zip=plugin.zip ${{ inputs.qit_options }} --print-report-url
+

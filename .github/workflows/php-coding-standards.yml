@@ -1,0 +1,148 @@
+name: PHP coding standards
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for PHPCS.
+        type: string
+        default: '8.5'
+        required: false
+      php_extensions:
+        description: Extensions passed to shivammathur/setup-php.
+        type: string
+        default: ''
+        required: false
+      working_directory:
+        description: Directory that contains composer.json.
+        type: string
+        default: .
+        required: false
+      composer_options:
+        description: Options passed to Composer install.
+        type: string
+        default: --prefer-dist --no-progress --no-interaction
+        required: false
+      command:
+        description: Explicit command to run instead of auto-detecting PHPCS.
+        type: string
+        default: ''
+        required: false
+      phpcs_args:
+        description: Arguments passed to PHPCS when no Composer script is found.
+        type: string
+        default: --standard=phpcs.xml.dist
+        required: false
+      annotate:
+        description: Convert checkstyle output to pull request annotations.
+        type: boolean
+        default: true
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 8
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+      ENV_VARS:
+        description: JSON object or array of {name,value} variables to export.
+        required: false
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read
+
+jobs:
+  php-coding-standards:
+    name: PHP coding standards
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export custom environment
+        env:
+          ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
+        if: ${{ env.ENV_VARS_JSON != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const raw = process.env.ENV_VARS_JSON || '';
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : Object.entries(data).map(([name, value]) => ({ name, value }));
+
+            for (const item of items) {
+              core.setSecret(String(item.value));
+              core.exportVariable(item.name, String(item.value));
+            }
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, cs2pr
+          coverage: none
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v3
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          composer-options: ${{ inputs.composer_options }}
+
+      - name: Run coding standards
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.command }}
+          PHPCS_ARGS: ${{ inputs.phpcs_args }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$COMMAND" ]; then
+            bash -lc "$COMMAND"
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+cs:audit[[:space:]]'; then
+            composer cs:audit
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+cs[[:space:]]'; then
+            composer cs
+            exit 0
+          fi
+
+          bin_dir="$(composer config bin-dir)"
+          phpcs_bin="${bin_dir%/}/phpcs"
+
+          if [ ! -x "$phpcs_bin" ]; then
+            echo "PHPCS binary not found at $phpcs_bin."
+            exit 1
+          fi
+
+          if [ "${{ inputs.annotate }}" = "true" ] && [[ "$PHPCS_ARGS" != *"--report-checkstyle"* ]]; then
+            # shellcheck disable=SC2086
+            "$phpcs_bin" $PHPCS_ARGS --report-checkstyle=phpcs-report.xml
+          else
+            # shellcheck disable=SC2086
+            "$phpcs_bin" $PHPCS_ARGS
+          fi
+
+      - name: Annotate PHPCS report
+        if: ${{ always() && inputs.annotate }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if [ -f phpcs-report.xml ]; then
+            cs2pr --graceful-warnings phpcs-report.xml
+          fi
