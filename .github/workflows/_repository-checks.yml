@@ -73,3 +73,48 @@ jobs:
 
       - name: Validate contracts
         run: npm run test:contracts
+
+      - name: Run workflow doctor fixture scan
+        run: npm run doctor -- --fail-on high fixtures/wp-plugin
+
+      - name: Run workflow doctor repository gate
+        run: npm run doctor:repo
+
+  fixture-composer:
+    name: Fixture Composer validate
+    uses: ./.github/workflows/composer-validate.yml
+    with:
+      working_directory: fixtures/php-package
+      install: true
+      audit: false
+
+  fixture-monorepo-qa:
+    name: Fixture monorepo QA
+    uses: ./.github/workflows/sympress-qa.yml
+    with:
+      include_root: false
+      package_glob: fixtures/monorepo/packages/*
+      run_audit: false
+      run_phpunit: false
+
+  fixture-archive:
+    name: Fixture WordPress archive
+    uses: ./.github/workflows/wordpress-archive.yml
+    with:
+      working_directory: fixtures/wp-plugin
+      package_name: sympress-fixture-plugin
+      package_version: 0.1.0
+      run_node_build: false
+
+  fixture-archive-check:
+    name: Fixture WordPress archive check
+    needs: fixture-archive
+    uses: ./.github/workflows/wordpress-archive-check.yml
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+      pull-requests: read
+    with:
+      artifact_name: ${{ needs.fixture-archive.outputs.artifact }}
+      run_plugin_review: false

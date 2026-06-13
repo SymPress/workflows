@@ -8,6 +8,16 @@ updates:
       time: '04:00'
       timezone: Europe/Berlin
     open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - '*'
 
   - package-ecosystem: npm
     directory: /
@@ -17,3 +27,14 @@ updates:
       time: '04:30'
       timezone: Europe/Berlin
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - '*'
