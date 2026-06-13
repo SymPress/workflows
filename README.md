@@ -2,7 +2,7 @@
 
 [![Repository checks](https://github.com/sympress/workflows/actions/workflows/_repository-checks.yml/badge.svg)](https://github.com/sympress/workflows/actions/workflows/_repository-checks.yml)
 [![CodeQL](https://github.com/sympress/workflows/actions/workflows/codeql.yml/badge.svg)](https://github.com/sympress/workflows/actions/workflows/codeql.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/sympress/workflows?display_name=tag&sort=semver)](https://github.com/sympress/workflows/releases)
 [![Security policy](https://img.shields.io/badge/security-policy-brightgreen.svg)](SECURITY.md)
 

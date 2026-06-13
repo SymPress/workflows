@@ -2,7 +2,7 @@
   "private": true,
   "name": "@sympress/workflows",
   "description": "GitHub Actions workflows for SymPress projects.",
-  "license": "MIT",
+  "license": "GPL-2.0-or-later",
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
     "doctor:repo": "node scripts/doctor.mjs --fail-on high .",
