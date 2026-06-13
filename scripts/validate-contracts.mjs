@@ -43,6 +43,8 @@ const catalogWorkflowFiles = new Set(catalog.workflows.map((workflow) => workflo
 const pinnedActionRef = /^[0-9a-f]{40}$/;
 const packageJson = JSON.parse(read('package.json'));
 const packageLock = JSON.parse(read('package-lock.json'));
+const fixturePhpPackage = JSON.parse(read('fixtures/php-package/composer.json'));
+const fixtureMonorepoPackage = JSON.parse(read('fixtures/monorepo/packages/example/composer.json'));
 const legacyBrand = ['SymPress', ['Reus', 'able'].join(''), 'Workflows'].join(' ');
 const legacySlug = ['sympress', [['reus', 'able'].join(''), 'workflows'].join('-')].join('/');
 
@@ -50,6 +52,11 @@ assert(packageJson.name === '@sympress/workflows', 'package.json must use the Sy
 assert(packageLock.name === '@sympress/workflows', 'package-lock.json must use the SymPress Workflows package name');
 assert(packageLock.packages[''].name === '@sympress/workflows', 'package-lock root package must use the SymPress Workflows package name');
 assert(catalog.repository === 'sympress/workflows', 'workflow-catalog.json must use the SymPress Workflows repository slug');
+assert(fixturePhpPackage.license, 'fixtures/php-package/composer.json must include a license for strict Composer validation');
+assert(
+  fixtureMonorepoPackage.license,
+  'fixtures/monorepo/packages/example/composer.json must include a license for strict Composer validation',
+);
 
 for (const file of workflowFiles) {
   assert(catalogWorkflowFiles.has(file), `workflow-catalog.json must include ${file}`);
@@ -87,6 +94,21 @@ for (const file of workflowFiles) {
       continue;
     }
     assert(pinnedActionRef.test(ref), `${file} must pin ${action} to a full commit SHA, got ${ref}`);
+  }
+}
+
+for (const file of workflowFiles) {
+  const workflow = parseDocument(read(file), { prettyErrors: true }).toJS();
+  for (const [jobName, job] of Object.entries(workflow.jobs || {})) {
+    const steps = Array.isArray(job.steps) ? job.steps : [];
+    for (const [index, step] of steps.entries()) {
+      if (typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@')) {
+        assert(
+          String(step.with?.['persist-credentials']) === 'false',
+          `${file} job ${jobName} checkout step ${index + 1} must set persist-credentials: false`,
+        );
+      }
+    }
   }
 }
 
@@ -232,10 +254,14 @@ assert(packageScripts['lint:docs'].includes('.github/**/*.md'), 'lint:docs must 
 const dependabot = read('.github/dependabot.yml');
 const dependabotDocument = parseDocument(dependabot, { prettyErrors: true });
 assert(dependabotDocument.errors.length === 0, 'dependabot.yml must be valid YAML');
+const dependabotConfig = dependabotDocument.toJS();
 assert(dependabot.includes('package-ecosystem: github-actions'), 'dependabot.yml must monitor GitHub Actions');
 assert(dependabot.includes('groups:'), 'dependabot.yml must group dependency updates');
 assert(dependabot.includes('github-actions:'), 'dependabot.yml must group GitHub Actions updates');
 assert(dependabot.includes('dev-dependencies:'), 'dependabot.yml must group npm development dependency updates');
+for (const update of dependabotConfig.updates || []) {
+  assert(update.cooldown?.['default-days'] > 0, `dependabot.yml ${update['package-ecosystem']} updates must define cooldown.default-days`);
+}
 
 const doctor = read('scripts/doctor.mjs');
 assert(doctor.includes('--fail-on <level>'), 'doctor.mjs must document --fail-on');
