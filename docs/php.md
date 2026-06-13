@@ -23,6 +23,8 @@ jobs:
 Auto-detection prefers Composer scripts `cs:audit`, `phpcs`, and `cs`, then
 falls back to PHPCS.
 Custom `command` values require `allow_custom_command: true`.
+Pull request annotations are enabled by default for PR events; branch and
+manual runs keep regular PHPCS output.
 
 ## Static Analysis
 
@@ -35,6 +37,8 @@ jobs:
 Auto-detection prefers Composer scripts `cs:analyze`, `phpstan`, `stan`, and
 `static-analysis`, then PHPStan config files.
 Custom `command` values require `allow_custom_command: true`.
+Set `dependency_versions` to `lowest` or `highest` when you want PHPStan to
+exercise Composer dependency bounds instead of the lock file.
 
 ## Unit Tests
 
@@ -46,3 +50,6 @@ jobs:
 
 Auto-detection prefers Composer scripts `test:unit`, `test`, and `tests`, then falls back to PHPUnit config files.
 Custom `command` values require `allow_custom_command: true`.
+
+Coverage is uploaded to Codecov when `CODECOV_TOKEN` is provided and
+`codecov_upload` is enabled. The default coverage file is `coverage.xml`.

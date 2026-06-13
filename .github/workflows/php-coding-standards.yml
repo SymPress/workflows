@@ -111,6 +111,8 @@ jobs:
           COMMAND: ${{ inputs.command }}
           ALLOW_CUSTOM_COMMAND: ${{ inputs.allow_custom_command }}
           PHPCS_ARGS: ${{ inputs.phpcs_args }}
+          ANNOTATE: ${{ inputs.annotate }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
@@ -146,7 +148,14 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ inputs.annotate }}" = "true" ] && [[ "$PHPCS_ARGS" != *"--report-checkstyle"* ]]; then
+          can_annotate=false
+          case "$EVENT_NAME" in
+            pull_request|pull_request_target)
+              can_annotate=true
+              ;;
+          esac
+
+          if [ "$ANNOTATE" = "true" ] && [ "$can_annotate" = "true" ] && [[ "$PHPCS_ARGS" != *"--report-checkstyle"* ]]; then
             # shellcheck disable=SC2086
             "$phpcs_bin" $PHPCS_ARGS --report-checkstyle=phpcs-report.xml
           else
@@ -155,7 +164,7 @@ jobs:
           fi
 
       - name: Annotate PHPCS report
-        if: ${{ always() && inputs.annotate }}
+        if: ${{ always() && inputs.annotate && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
         working-directory: ${{ inputs.working_directory }}
         run: |
           if [ -f phpcs-report.xml ]; then

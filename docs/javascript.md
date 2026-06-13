@@ -29,3 +29,6 @@ jobs:
 
 If the configured script is missing, the workflow runs Jest when it is installed.
 Custom `command` values require `allow_custom_command: true`.
+
+Coverage is uploaded to Codecov when `CODECOV_TOKEN` is provided and
+`codecov_upload` is enabled. The default coverage file is `coverage/lcov.info`.

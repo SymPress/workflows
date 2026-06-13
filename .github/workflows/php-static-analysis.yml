@@ -23,6 +23,11 @@ on:
         type: string
         default: --prefer-dist --no-progress --no-interaction
         required: false
+      dependency_versions:
+        description: Dependency resolution passed to Composer install. Use locked, highest, or lowest.
+        type: string
+        default: locked
+        required: false
       command:
         description: Explicit command to run instead of auto-detecting PHPStan.
         type: string
@@ -96,6 +101,7 @@ jobs:
         with:
           working-directory: ${{ inputs.working_directory }}
           composer-options: ${{ inputs.composer_options }}
+          dependency-versions: ${{ inputs.dependency_versions }}
 
       - name: Run static analysis
         working-directory: ${{ inputs.working_directory }}

@@ -48,6 +48,21 @@ on:
         type: boolean
         default: true
         required: false
+      codecov_upload:
+        description: Upload coverage to Codecov when CODECOV_TOKEN is provided.
+        type: boolean
+        default: true
+        required: false
+      codecov_files:
+        description: Coverage file paths passed to Codecov.
+        type: string
+        default: coverage.xml
+        required: false
+      codecov_flags:
+        description: Codecov flags.
+        type: string
+        default: unittests
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -60,6 +75,9 @@ on:
       ENV_VARS:
         description: JSON object or array of {name,value} variables to export.
         required: false
+      CODECOV_TOKEN:
+        description: Token used to upload coverage reports to Codecov.
+        required: false
 
 permissions:
   contents: read
@@ -69,6 +87,8 @@ jobs:
     name: PHP unit tests
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -155,3 +175,48 @@ jobs:
           name: phpunit-junit
           path: ${{ format('{0}/junit.xml', inputs.working_directory) }}
           if-no-files-found: ignore
+
+      - name: Detect Codecov coverage files
+        id: codecov-files
+        if: ${{ always() && inputs.codecov_upload && env.CODECOV_TOKEN != '' }}
+        shell: bash
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working_directory }}
+          CODECOV_FILES: ${{ inputs.codecov_files }}
+        run: |
+          set -euo pipefail
+          wd="${WORKING_DIRECTORY%/}"
+          found=()
+
+          IFS=',' read -ra candidates <<< "$CODECOV_FILES"
+          for raw_path in "${candidates[@]}"; do
+            path="$(printf '%s' "$raw_path" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            [ -z "$path" ] && continue
+
+            if [[ "$path" = /* || "$wd" = "." ]]; then
+              candidate="$path"
+            else
+              candidate="$wd/$path"
+            fi
+
+            if compgen -G "$candidate" >/dev/null; then
+              found+=("$candidate")
+            fi
+          done
+
+          if [ "${#found[@]}" -eq 0 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          (IFS=,; echo "files=${found[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage to Codecov
+        if: ${{ always() && steps.codecov-files.outputs.found == 'true' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: ${{ steps.codecov-files.outputs.files }}
+          flags: ${{ inputs.codecov_flags }}
+          fail_ci_if_error: true
