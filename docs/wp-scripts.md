@@ -13,7 +13,6 @@ jobs:
 Supported tools:
 
 - `js`: `wp-scripts lint-js`
-- `style`: `wp-scripts lint-style --formatter github`
+- `style`: `wp-scripts lint-style`
 - `md-docs`: `wp-scripts lint-md-docs`
 - `pkg-json`: `wp-scripts lint-pkg-json`
-

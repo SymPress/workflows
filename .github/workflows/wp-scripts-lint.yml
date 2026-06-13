@@ -193,7 +193,7 @@ jobs:
       - name: Lint styles
         if: ${{ contains(fromJSON(inputs.lint_tools), 'style') }}
         working-directory: ${{ inputs.working_directory }}
-        run: ./node_modules/.bin/wp-scripts lint-style ${{ inputs.stylelint_args }} --formatter github
+        run: ./node_modules/.bin/wp-scripts lint-style ${{ inputs.stylelint_args }}
 
       - name: Lint Markdown
         if: ${{ contains(fromJSON(inputs.lint_tools), 'md-docs') }}
