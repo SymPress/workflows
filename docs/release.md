@@ -5,7 +5,7 @@ Use `automatic-release.yml` for semantic-release based releases.
 ```yml
 jobs:
   release:
-    uses: sympress/reusable-workflows/.github/workflows/automatic-release.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/automatic-release.yml@v1
     secrets:
       GITHUB_USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -20,3 +20,6 @@ The fallback config:
 - updates `composer.json`, `package.json`, `package-lock.json`, and WordPress headers when present;
 - commits release files with `[skip ci]`.
 
+The workflow serializes releases per ref and installs pinned semantic-release
+packages. Production callers should pin this reusable workflow to a release tag.
+See [Release Strategy](release-strategy.md).

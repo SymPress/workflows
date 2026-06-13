@@ -5,7 +5,7 @@ Use `woo-qit.yml` after an archive or build workflow has uploaded an artifact.
 ```yml
 jobs:
   qit:
-    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
       qit_test: activation
@@ -24,3 +24,6 @@ strategy:
       - security
 ```
 
+The QIT executable is downloaded from a pinned `woocommerce/qit-cli` ref by
+default. Override `qit_ref` only during planned upgrades. Provide `qit_sha256`
+when you want checksum verification for the downloaded executable.

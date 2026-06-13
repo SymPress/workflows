@@ -1,0 +1,24 @@
+name: Archive And QIT
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  archive:
+    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    with:
+      package_version: ${{ github.ref_name }}
+
+  qit:
+    needs: archive
+    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
+    with:
+      artifact_name: ${{ needs.archive.outputs.artifact }}
+      qit_test: activation
+    secrets:
+      WOO_PARTNER_USER: ${{ secrets.WOO_PARTNER_USER }}
+      WOO_PARTNER_SECRET: ${{ secrets.WOO_PARTNER_SECRET }}

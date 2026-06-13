@@ -22,6 +22,16 @@ on:
         type: string
         default: ''
         required: false
+      qit_ref:
+        description: woocommerce/qit-cli commit, tag, or branch used to download the QIT executable.
+        type: string
+        default: 2745b88fb76608cd4a5d0e12d8ec4a7609a1a326
+        required: false
+      qit_sha256:
+        description: Optional SHA256 checksum for the downloaded QIT executable.
+        type: string
+        default: ''
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -69,8 +79,16 @@ jobs:
         run: zip -r ../plugin.zip .
 
       - name: Install QIT
+        shell: bash
+        env:
+          QIT_REF: ${{ inputs.qit_ref }}
+          QIT_SHA256: ${{ inputs.qit_sha256 }}
         run: |
-          curl -fsSL https://github.com/woocommerce/qit-cli/raw/trunk/qit -o qit
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/woocommerce/qit-cli/${QIT_REF}/qit" -o qit
+          if [ -n "$QIT_SHA256" ]; then
+            printf '%s  qit\n' "$QIT_SHA256" | sha256sum -c -
+          fi
           chmod +x qit
 
       - name: Add QIT auth
@@ -78,4 +96,3 @@ jobs:
 
       - name: Run QIT
         run: ./qit run:${{ inputs.qit_test }} ${{ steps.plugin.outputs.folder }} --zip=plugin.zip ${{ inputs.qit_options }} --print-report-url
-

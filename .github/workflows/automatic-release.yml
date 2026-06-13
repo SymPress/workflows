@@ -63,6 +63,9 @@ jobs:
     name: Automatic release
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    concurrency:
+      group: release-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -156,15 +159,15 @@ jobs:
       - name: Install semantic-release
         run: |
           npm install --no-save \
-            semantic-release \
-            @semantic-release/changelog \
-            @semantic-release/commit-analyzer \
-            @semantic-release/exec \
-            @semantic-release/git \
-            @semantic-release/github \
-            @semantic-release/npm \
-            @semantic-release/release-notes-generator \
-            conventional-changelog-conventionalcommits
+            semantic-release@25.0.5 \
+            @semantic-release/changelog@6.0.3 \
+            @semantic-release/commit-analyzer@13.0.1 \
+            @semantic-release/exec@7.1.0 \
+            @semantic-release/git@10.0.1 \
+            @semantic-release/github@12.0.8 \
+            @semantic-release/npm@13.1.5 \
+            @semantic-release/release-notes-generator@14.1.1 \
+            conventional-changelog-conventionalcommits@9.3.1
 
       - name: Release
         env:
@@ -177,4 +180,3 @@ jobs:
         run: |
           rm -f "${{ runner.temp }}/signingkey"
           rm -f "${{ runner.temp }}/signingkey.pub"
-

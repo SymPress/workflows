@@ -1,0 +1,29 @@
+name: WordPress Plugin Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  archive:
+    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    with:
+      package_version: ${{ github.ref_name }}
+    secrets:
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+      NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+
+  qit:
+    needs: archive
+    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
+    with:
+      artifact_name: ${{ needs.archive.outputs.artifact }}
+      qit_test: activation
+    secrets:
+      WOO_PARTNER_USER: ${{ secrets.WOO_PARTNER_USER }}
+      WOO_PARTNER_SECRET: ${{ secrets.WOO_PARTNER_SECRET }}
