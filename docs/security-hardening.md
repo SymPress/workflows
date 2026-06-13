@@ -52,6 +52,10 @@ trust-on-first-use behavior.
 
 ## Supply Chain
 
+- External GitHub Actions are pinned to full commit SHAs with the human-readable
+  tag kept as an inline comment.
+- Dependabot monitors GitHub Actions and npm dependencies so pinned refs can be
+  updated through normal pull requests instead of floating tags.
 - `automatic-release.yml` installs pinned semantic-release packages.
 - `woo-qit.yml` downloads QIT from a pinned ref and supports `qit_sha256`.
 - Repository checks include actionlint, contract tests, and zizmor.

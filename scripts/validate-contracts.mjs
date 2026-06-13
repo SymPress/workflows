@@ -40,6 +40,7 @@ const workflowFiles = listFiles('.github/workflows', (file) => file.endsWith('.y
 const workflowNames = new Set(workflowFiles.map((file) => path.basename(file)));
 const catalog = JSON.parse(read('workflow-catalog.json'));
 const catalogWorkflowFiles = new Set(catalog.workflows.map((workflow) => workflow.file));
+const pinnedActionRef = /^[0-9a-f]{40}$/;
 
 for (const file of workflowFiles) {
   assert(catalogWorkflowFiles.has(file), `workflow-catalog.json must include ${file}`);
@@ -52,6 +53,17 @@ for (const file of catalogWorkflowFiles) {
 for (const file of workflowFiles) {
   const document = parseDocument(read(file), { prettyErrors: true });
   assert(document.errors.length === 0, `${file} must be valid YAML`);
+}
+
+for (const file of workflowFiles) {
+  const text = read(file);
+  for (const match of text.matchAll(/^\s*uses:\s+([^@\s#]+)@([^\s#]+)/gm)) {
+    const [, action, ref] = match;
+    if (action.startsWith('./')) {
+      continue;
+    }
+    assert(pinnedActionRef.test(ref), `${file} must pin ${action} to a full commit SHA, got ${ref}`);
+  }
 }
 
 const referenceFiles = [
@@ -133,6 +145,7 @@ assert(qit.includes('qit_sha256'), 'woo-qit.yml must support optional QIT checks
 const repositoryChecks = read('.github/workflows/_repository-checks.yml');
 assert(repositoryChecks.includes('zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d'), '_repository-checks.yml must pin zizmor');
 assert(repositoryChecks.includes('npm run test:contracts'), '_repository-checks.yml must run contract tests');
+assert(existsSync(path.join(root, '.github', 'dependabot.yml')), 'dependabot.yml must keep pinned action updates visible');
 
 for (const [file, input] of [
   ['.github/workflows/assets-build.yml', 'artifact_include_hidden_files'],
