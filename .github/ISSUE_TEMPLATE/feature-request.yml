@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest focused workflow coverage or a safer default.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SymPress Workflows works best when additions stay composable, secure by default, and useful across more than one caller repository.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to automate, secure, or simplify?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the workflow, input, output, default, or documentation change.
+    validations:
+      required: true
+  - type: textarea
+    id: callers
+    attributes:
+      label: Caller repositories
+      description: Which kinds of projects would use this?
+      placeholder: Composer package, WordPress plugin, monorepo, WooCommerce extension...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - PHP QA
+        - JavaScript QA
+        - WordPress archive
+        - Browser testing
+        - Release
+        - Deployment
+        - Supply chain security
+        - Developer experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security and compatibility impact
+      description: Mention permissions, secrets, shell execution, artifacts, or breaking changes.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: This can be implemented without weakening secure defaults.
+          required: false

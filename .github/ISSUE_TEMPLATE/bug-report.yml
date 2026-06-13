@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible SymPress Workflows problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve SymPress Workflows. Please include enough detail for maintainers to reproduce the issue without access to your secrets.
+  - type: input
+    id: workflow
+    attributes:
+      label: Called workflow
+      description: Which workflow failed?
+      placeholder: sympress-qa.yml, wordpress-archive.yml, playwright.yml...
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: SymPress Workflows ref
+      description: Which tag or commit SHA is the caller using?
+      placeholder: v1, v1.2.3, or a commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal caller workflow or exact steps.
+      placeholder: |
+        1. Use this caller workflow...
+        2. Trigger it with...
+        3. The called workflow fails at...
+    validations:
+      required: true
+  - type: textarea
+    id: caller
+    attributes:
+      label: Caller workflow
+      description: Paste the relevant caller YAML with secrets removed.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share versions and context that affect the workflow.
+      value: |
+        - Caller repository visibility:
+        - GitHub event:
+        - Runner:
+        - PHP:
+        - Node:
+        - Composer:
+        - Package manager and lockfile:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the failing step output. Remove secrets and tokens.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed secrets and tokens from this report.
+          required: true
+        - label: I can reproduce this with the latest relevant SymPress Workflows release.
+          required: false

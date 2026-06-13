@@ -1,0 +1,58 @@
+name: Adoption question
+description: Ask for workflow selection or migration help.
+title: "[Adoption]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when you are choosing workflows for a project or migrating existing GitHub Actions into SymPress Workflows.
+  - type: dropdown
+    id: project
+    attributes:
+      label: Project type
+      multiple: true
+      options:
+        - Composer package
+        - WordPress plugin
+        - WordPress theme
+        - WooCommerce extension
+        - Application monorepo
+        - DDEV project
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to set up?
+      description: Describe the desired CI, release, artifact, or deployment flow.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workflow setup
+      description: Paste relevant caller workflow YAML or summarize the current automation.
+      render: yaml
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Mention private dependencies, required secrets, branch protection, environments, or compliance needs.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: Optional output from `npm run doctor -- /path/to/consumer-repository`.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I reviewed the decision guide.
+          required: true
+        - label: I removed secrets and tokens from pasted workflow content.
+          required: true
