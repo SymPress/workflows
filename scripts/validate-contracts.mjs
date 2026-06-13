@@ -62,7 +62,7 @@ const referenceFiles = [
 
 for (const file of referenceFiles) {
   const text = read(file);
-  for (const match of text.matchAll(/sympress\/reusable-workflows\/\.github\/workflows\/([^@\s]+)@main/g)) {
+  for (const match of text.matchAll(/sympress\/reusable-workflows\/\.github\/workflows\/([^@\s]+)@[A-Za-z0-9._/-]+/g)) {
     assert(workflowNames.has(match[1]), `${file} references missing workflow ${match[1]}`);
   }
 }
