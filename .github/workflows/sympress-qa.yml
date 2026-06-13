@@ -83,10 +83,58 @@ permissions:
   contents: read
 
 jobs:
-  sympress-qa:
-    name: SymPress QA
+  discover:
+    name: Discover Composer targets
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+      has_targets: ${{ steps.targets.outputs.has_targets }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Discover Composer targets
+        id: targets
+        shell: bash
+        env:
+          PACKAGE_GLOB: ${{ inputs.package_glob }}
+          INCLUDE_ROOT: ${{ inputs.include_root }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          targets=()
+          if [ "$INCLUDE_ROOT" = "true" ] && [ -f composer.json ]; then
+            targets+=(".")
+          fi
+
+          # shellcheck disable=SC2086
+          for composer_file in ${PACKAGE_GLOB}/composer.json; do
+            target="${composer_file%/composer.json}"
+            if [ "$target" != "." ]; then
+              targets+=("$target")
+            fi
+          done
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo 'targets=["__no_targets__"]' >> "$GITHUB_OUTPUT"
+            echo "has_targets=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          targets_json="$(printf '%s\n' "${targets[@]}" | jq -R -s -c 'split("\n")[:-1]')"
+          echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
+          echo "has_targets=true" >> "$GITHUB_OUTPUT"
+
+  qa:
+    name: QA (${{ matrix.target }})
+    needs: discover
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.discover.outputs.targets) }}
     env:
       COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
@@ -94,10 +142,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Report empty repository
+        if: ${{ matrix.target == '__no_targets__' }}
+        run: echo "No Composer targets found."
+
       - name: Export custom environment
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
-        if: ${{ env.ENV_VARS_JSON != '' }}
+        if: ${{ matrix.target != '__no_targets__' && env.ENV_VARS_JSON != '' }}
         uses: actions/github-script@v7
         with:
           script: |
@@ -113,6 +165,7 @@ jobs:
             }
 
       - name: Set up PHP
+        if: ${{ matrix.target != '__no_targets__' }}
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php_version }}
@@ -120,17 +173,58 @@ jobs:
           tools: composer:v2, cs2pr
           coverage: none
 
+      - name: Detect package manager
+        id: package-manager
+        if: ${{ matrix.target != '__no_targets__' && inputs.run_node_build }}
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          path_for() {
+            if [ "$TARGET" = "." ]; then
+              printf '%s' "$1"
+            else
+              printf '%s/%s' "${TARGET%/}" "$1"
+            fi
+          }
+
+          if [ -f "$(path_for pnpm-lock.yaml)" ]; then
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for pnpm-lock.yaml)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for yarn.lock)" ]; then
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for yarn.lock)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for package-lock.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for package-lock.json)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for npm-shrinkwrap.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for npm-shrinkwrap.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "lockfile=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node
-        if: ${{ inputs.run_node_build }}
+        if: ${{ matrix.target != '__no_targets__' && inputs.run_node_build && steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
 
+      - name: Set up Node with cache
+        if: ${{ matrix.target != '__no_targets__' && inputs.run_node_build && steps.package-manager.outputs.cache != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: ${{ steps.package-manager.outputs.cache }}
+          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
+
       - name: Run QA
+        if: ${{ matrix.target != '__no_targets__' }}
+        working-directory: ${{ matrix.target }}
         shell: bash
         env:
-          PACKAGE_GLOB: ${{ inputs.package_glob }}
-          INCLUDE_ROOT: ${{ inputs.include_root }}
           COMPOSER_OPTIONS: ${{ inputs.composer_options }}
           RUN_VALIDATE: ${{ inputs.run_validate }}
           RUN_AUDIT: ${{ inputs.run_audit }}
@@ -140,24 +234,6 @@ jobs:
           RUN_NODE_BUILD: ${{ inputs.run_node_build }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
-
-          targets=()
-          if [ "$INCLUDE_ROOT" = "true" ] && [ -f composer.json ]; then
-            targets+=(".")
-          fi
-
-          for composer_file in ${PACKAGE_GLOB}/composer.json; do
-            target="${composer_file%/composer.json}"
-            if [ "$target" != "." ]; then
-              targets+=("$target")
-            fi
-          done
-
-          if [ "${#targets[@]}" -eq 0 ]; then
-            echo "No Composer targets found."
-            exit 0
-          fi
 
           has_script() {
             local script="$1"
@@ -268,41 +344,33 @@ jobs:
             fi
           }
 
-          for target in "${targets[@]}"; do
-            echo "::group::${target}"
-            (
-              cd "$target"
+          if [ "$RUN_VALIDATE" = "true" ]; then
+            composer validate --strict --no-check-publish
+          fi
 
-              if [ "$RUN_VALIDATE" = "true" ]; then
-                composer validate --strict --no-check-publish
-              fi
+          # shellcheck disable=SC2086
+          composer install $COMPOSER_OPTIONS
 
-              # shellcheck disable=SC2086
-              composer install $COMPOSER_OPTIONS
+          if [ "$RUN_AUDIT" = "true" ]; then
+            if [ -f composer.lock ]; then
+              composer audit --locked --no-interaction
+            else
+              composer audit --no-interaction
+            fi
+          fi
 
-              if [ "$RUN_AUDIT" = "true" ]; then
-                if [ -f composer.lock ]; then
-                  composer audit --locked --no-interaction
-                else
-                  composer audit --no-interaction
-                fi
-              fi
+          if [ "$RUN_PHPCS" = "true" ]; then
+            run_phpcs
+          fi
 
-              if [ "$RUN_PHPCS" = "true" ]; then
-                run_phpcs
-              fi
+          if [ "$RUN_PHPSTAN" = "true" ]; then
+            run_static_analysis
+          fi
 
-              if [ "$RUN_PHPSTAN" = "true" ]; then
-                run_static_analysis
-              fi
+          if [ "$RUN_PHPUNIT" = "true" ]; then
+            run_phpunit
+          fi
 
-              if [ "$RUN_PHPUNIT" = "true" ]; then
-                run_phpunit
-              fi
-
-              if [ "$RUN_NODE_BUILD" = "true" ]; then
-                run_node_build
-              fi
-            )
-            echo "::endgroup::"
-          done
+          if [ "$RUN_NODE_BUILD" = "true" ]; then
+            run_node_build
+          fi

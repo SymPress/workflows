@@ -5,14 +5,16 @@ Use `sympress-qa.yml` for Composer-first SymPress packages and monorepos.
 ```yml
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
       include_root: true
       package_glob: packages/*
 ```
 
-The workflow discovers Composer packages, installs dependencies, and runs enabled checks when the package has matching scripts or config files.
+The workflow discovers Composer packages, fans them out as a matrix, installs
+dependencies, and runs enabled checks when each package has matching scripts or
+config files.
 
 Recognized Composer scripts:
 
