@@ -306,7 +306,7 @@ for (const file of [
 }
 
 const playwright = read('.github/workflows/playwright.yml');
-assert(playwright.includes('actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830'), 'playwright.yml must pin the Playwright browser cache action');
+assert(playwright.includes('actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae'), 'playwright.yml must pin the Playwright browser cache action');
 assert(!playwright.includes('source .env.ci'), 'playwright.yml must parse .env.ci without sourcing it');
 
 const textQuality = read('.github/workflows/text-quality.yml');
