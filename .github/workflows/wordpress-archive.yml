@@ -140,6 +140,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Detect project files
         id: detect
@@ -323,10 +325,12 @@ jobs:
           INPUT_PACKAGE_FOLDER: ${{ inputs.package_folder }}
           INPUT_MAIN_FILE: ${{ inputs.main_file }}
           PACKAGE_VERSION: ${{ inputs.package_version }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
-          package_name="${INPUT_PACKAGE_NAME:-${{ github.event.repository.name }}}"
+          package_name="${INPUT_PACKAGE_NAME:-$REPOSITORY_NAME}"
           package_folder="${INPUT_PACKAGE_FOLDER:-$package_name}"
           main_file="$INPUT_MAIN_FILE"
 
@@ -344,7 +348,7 @@ jobs:
           if [ -n "$PACKAGE_VERSION" ] && [ -n "$main_file" ] && [ -f "$main_file" ]; then
             sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?Version:[[:space:]]*).*/\\1$PACKAGE_VERSION/" "$main_file"
             if grep -Eq '^[[:space:]]*(\*[[:space:]]*)?SHA:' "$main_file"; then
-              sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1${{ github.sha }}/" "$main_file"
+              sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1$SOURCE_SHA/" "$main_file"
             fi
           fi
 

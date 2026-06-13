@@ -54,15 +54,17 @@ on:
         required: false
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   automatic-release:
     name: Automatic release
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     concurrency:
       group: release-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
@@ -139,6 +141,7 @@ jobs:
           repository: ${{ inputs.workflow_repository }}
           ref: ${{ inputs.workflow_ref }}
           path: .workflow-templates
+          persist-credentials: false
 
       - name: Install fallback release config
         if: ${{ steps.release-config.outputs.has_config == 'false' }}

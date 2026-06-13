@@ -70,14 +70,17 @@ on:
 permissions:
   contents: read
   actions: read
-  checks: write
-  pull-requests: read
 
 jobs:
   wordpress-archive-check:
     name: WordPress archive check
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+      pull-requests: read
     steps:
       - name: Download artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8

@@ -198,13 +198,15 @@ on:
         value: ${{ jobs.build-and-distribute.outputs.skipped_existing_build }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-distribute:
     name: Build and distribute
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: write
     concurrency:
       group: build-and-distribute-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
@@ -223,6 +225,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Start SSH agent
         env:
@@ -510,6 +513,7 @@ jobs:
           UPDATE_COMPOSER: ${{ inputs.update_composer_version }}
           UPDATE_PACKAGE_JSON: ${{ inputs.update_package_json_version }}
           UPDATE_WORDPRESS_HEADERS: ${{ inputs.update_wordpress_headers }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -537,10 +541,10 @@ jobs:
             if [ -n "$main_file" ] && [ -f "$main_file" ]; then
               sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?Version:[[:space:]]*).*/\\1$PACKAGE_VERSION/" "$main_file"
               if grep -Eq '^[[:space:]]*(\*[[:space:]]*)?SHA:' "$main_file"; then
-                sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1${{ github.sha }}/" "$main_file"
+                sed -i -E "s/^([[:space:]]*(\\*[[:space:]]*)?SHA:[[:space:]]*).*/\\1$SOURCE_SHA/" "$main_file"
               elif grep -Eq '^[[:space:]]*(\*[[:space:]]*)?Version:' "$main_file"; then
                 tmp_file="$(mktemp)"
-                awk -v sha="${{ github.sha }}" '
+                awk -v sha="$SOURCE_SHA" '
                   {
                     print
                   }
@@ -612,6 +616,8 @@ jobs:
         if: ${{ steps.existing-build.outputs.exists != 'true' && steps.detect.outputs.has_composer == 'true' && inputs.run_php_scoper }}
         working-directory: ${{ inputs.working_directory }}
         shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ ! -f scoper.inc.php ]; then
@@ -622,7 +628,7 @@ jobs:
           php-scoper add-prefix --force --output-dir=.scoped-build
           composer --working-dir=.scoped-build dump-autoload -o
           if [ -f ".scoped-build/vendor/composer/autoload_real.php" ]; then
-            sed -i "s/'__composer_autoload_files'/\'__composer_autoload_files_${{ github.sha }}'/g" ".scoped-build/vendor/composer/autoload_real.php"
+            sed -i "s/'__composer_autoload_files'/\'__composer_autoload_files_${SOURCE_SHA}'/g" ".scoped-build/vendor/composer/autoload_real.php"
           fi
           rsync -a .scoped-build/ ./
           rm -rf .scoped-build
@@ -634,6 +640,7 @@ jobs:
         env:
           INPUT_PACKAGE_NAME: ${{ inputs.package_name }}
           PACKAGE_VERSION: ${{ steps.metadata.outputs.package_version }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
           ARTIFACT_ALLOWED_ENV_FILES: ${{ inputs.artifact_allowed_env_files }}
           ARTIFACT_EXTRA_EXCLUDES: ${{ inputs.artifact_extra_excludes }}
           ARTIFACT_SECRET_SCAN: ${{ inputs.artifact_secret_scan }}
@@ -653,7 +660,7 @@ jobs:
             sudo apt-get install -y rsync
           fi
 
-          package_name="${INPUT_PACKAGE_NAME:-${{ github.event.repository.name }}}"
+          package_name="${INPUT_PACKAGE_NAME:-$REPOSITORY_NAME}"
           artifact="${package_name}-${PACKAGE_VERSION}"
 
           rm -rf .artifact

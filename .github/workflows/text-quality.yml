@@ -73,6 +73,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Run typos
         if: ${{ inputs.run_typos }}
@@ -103,6 +105,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Run grammar review
         uses: reviewdog/action-languagetool@afd06e9b0f782c9562c92efffb66a49c09b2b4f4 # v1
