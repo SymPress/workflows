@@ -280,23 +280,45 @@ jobs:
               return
             fi
 
+            if has_script "phpcs"; then
+              composer phpcs
+              return
+            fi
+
             if has_script "cs"; then
               composer cs
               return
             fi
 
+            local bin_dir phpcs_bin
+            bin_dir="$(composer config bin-dir)"
+            phpcs_bin="${bin_dir%/}/phpcs"
+
+            if [ ! -x "$phpcs_bin" ]; then
+              echo "No PHPCS configuration or executable found."
+              return
+            fi
+
             if [ -f phpcs.xml ] || [ -f phpcs.xml.dist ]; then
-              local bin_dir
-              bin_dir="$(composer config bin-dir)"
-              "${bin_dir%/}/phpcs" --standard="$(test -f phpcs.xml && echo phpcs.xml || echo phpcs.xml.dist)"
+              "$phpcs_bin" --standard="$(test -f phpcs.xml && echo phpcs.xml || echo phpcs.xml.dist)"
             else
-              echo "No PHPCS configuration found."
+              "$phpcs_bin" --standard=PSR12 .
             fi
           }
 
           run_static_analysis() {
             if has_script "cs:analyze"; then
               composer cs:analyze
+              return
+            fi
+
+            if has_script "phpstan"; then
+              composer phpstan
+              return
+            fi
+
+            if has_script "stan"; then
+              composer stan
               return
             fi
 

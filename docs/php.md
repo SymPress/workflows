@@ -20,7 +20,8 @@ jobs:
       working_directory: packages/kernel
 ```
 
-Auto-detection prefers Composer scripts `cs:audit` and `cs`, then falls back to PHPCS.
+Auto-detection prefers Composer scripts `cs:audit`, `phpcs`, and `cs`, then
+falls back to PHPCS.
 Custom `command` values require `allow_custom_command: true`.
 
 ## Static Analysis
@@ -31,7 +32,8 @@ jobs:
     uses: sympress/reusable-workflows/.github/workflows/php-static-analysis.yml@v1
 ```
 
-Auto-detection prefers Composer scripts `cs:analyze` and `static-analysis`, then PHPStan config files.
+Auto-detection prefers Composer scripts `cs:analyze`, `phpstan`, `stan`, and
+`static-analysis`, then PHPStan config files.
 Custom `command` values require `allow_custom_command: true`.
 
 ## Unit Tests

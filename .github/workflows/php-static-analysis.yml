@@ -121,6 +121,16 @@ jobs:
             exit 0
           fi
 
+          if composer run-script --list | grep -Eq '^[[:space:]]+phpstan[[:space:]]'; then
+            composer phpstan
+            exit 0
+          fi
+
+          if composer run-script --list | grep -Eq '^[[:space:]]+stan[[:space:]]'; then
+            composer stan
+            exit 0
+          fi
+
           if composer run-script --list | grep -Eq '^[[:space:]]+static-analysis[[:space:]]'; then
             composer static-analysis
             exit 0

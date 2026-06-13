@@ -128,6 +128,11 @@ jobs:
             exit 0
           fi
 
+          if composer run-script --list | grep -Eq '^[[:space:]]+phpcs[[:space:]]'; then
+            composer phpcs
+            exit 0
+          fi
+
           if composer run-script --list | grep -Eq '^[[:space:]]+cs[[:space:]]'; then
             composer cs
             exit 0

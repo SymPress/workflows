@@ -18,9 +18,14 @@ config files.
 
 Recognized Composer scripts:
 
-- Coding standards: `cs:audit`, `cs`
-- Static analysis: `cs:analyze`, `static-analysis`
+- Coding standards: `cs:audit`, `phpcs`, `cs`
+- Static analysis: `cs:analyze`, `phpstan`, `stan`, `static-analysis`
 - Tests: `test:unit`, `test`, `tests`
+
+For enterprise WordPress monorepos that only run PHPCS and PHPStan in packages,
+set `include_root: false`, `run_audit: false`, and `run_phpunit: false` for the
+package job. Use `composer-validate.yml` with `install: true` for the root
+application install check.
 
 Useful inputs:
 
