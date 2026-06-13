@@ -68,7 +68,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -78,7 +78,7 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
         if: ${{ env.SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ env.SSH_KEY }}
 
@@ -130,7 +130,7 @@ jobs:
 
       - name: Checkout workflow templates
         if: ${{ steps.release-config.outputs.has_config == 'false' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: ${{ inputs.workflow_repository }}
           ref: ${{ inputs.workflow_ref }}
@@ -149,7 +149,7 @@ jobs:
           rm -rf .workflow-templates
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         with:
