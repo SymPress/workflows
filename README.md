@@ -80,6 +80,8 @@ Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
   release tags, first consumer workflow, and secrets.
 - [Usage](docs/usage.md) for day-to-day workflow calls.
 - [Consumer setup checklist](docs/consumer-setup.md) for onboarding a project.
+- [Enterprise WordPress monorepo QA](docs/enterprise-wordpress-monorepo.md) for
+  root application install checks plus package-level PHPCS/PHPStan.
 - [Workflow reference](docs/workflow-reference.md) for operators.
 - [Troubleshooting](docs/troubleshooting.md) for common GitHub Actions errors.
 - [Maintainer guide](docs/maintainer-guide.md) for changing this repository.

@@ -9,6 +9,9 @@ Start with [Installation](installation.md), then use
 ## Quality
 
 - Use `sympress-qa.yml` for Composer-first repositories and monorepos.
+- Use `composer-validate.yml` plus `sympress-qa.yml` for enterprise WordPress
+  application monorepos where the root app only needs Composer validation and
+  install, while `packages/*` get PHPCS/PHPStan checks.
 - Use focused PHP workflows when a repository needs separate required checks.
 - Use `wp-scripts-lint.yml` for projects standardized on `@wordpress/scripts`.
 - Use JavaScript workflows for non-WordPress packages or custom toolchains.

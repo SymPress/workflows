@@ -11,6 +11,8 @@ Start here when adopting or maintaining the workflow set.
 - [Consumer Setup Checklist](consumer-setup.md): step-by-step onboarding for a
   project repository.
 - [Decision Guide](decision-guide.md): choose the smallest useful workflow.
+- [Enterprise WordPress Monorepo QA](enterprise-wordpress-monorepo.md): root
+  application install plus dynamic package QA.
 - [Troubleshooting](troubleshooting.md): common GitHub Actions and workflow
   errors.
 

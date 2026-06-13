@@ -1,0 +1,36 @@
+name: Testing
+
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - '**/*.yml'
+      - '**/*.yaml'
+      - deploy.php
+      - dev-ops/**
+
+permissions:
+  contents: read
+
+jobs:
+  website-ci:
+    name: Website CI
+    uses: sympress/reusable-workflows/.github/workflows/composer-validate.yml@v1
+    with:
+      install: true
+      audit: false
+      validate_options: ''
+    secrets:
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+
+  package-ci:
+    name: Package CI
+    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    with:
+      include_root: false
+      package_glob: packages/*
+      run_validate: false
+      run_audit: false
+      run_phpunit: false
+    secrets:
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
