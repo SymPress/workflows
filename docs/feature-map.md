@@ -38,3 +38,7 @@ The workflow set covers the full automation surface SymPress projects currently 
 - Secrets are optional unless a workflow cannot work without them.
 - Build workflows avoid same-branch writes unless explicitly allowed.
 - `.distignore` is supported for package artifacts.
+- Artifact workflows block secret-like files and validate staged packages.
+- Shell command overrides are disabled unless a caller opts in explicitly.
+- Node workflows use npm, yarn, or pnpm lockfiles for dependency caching.
+- `workflow-catalog.json` documents trust level, category, and permissions.

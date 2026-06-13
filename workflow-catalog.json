@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "repository": "sympress/reusable-workflows",
+  "workflows": [
+    {
+      "id": "repository-checks",
+      "file": ".github/workflows/_repository-checks.yml",
+      "category": "governance",
+      "permissions": "read",
+      "trust": "maintainer workflow",
+      "summary": "Lint workflows, lint docs, audit workflow security, and validate contracts."
+    },
+    {
+      "id": "assets-build",
+      "file": ".github/workflows/assets-build.yml",
+      "category": "build",
+      "permissions": "read",
+      "trust": "safe default",
+      "summary": "Build Composer and Node assets and optionally upload an artifact."
+    },
+    {
+      "id": "automatic-release",
+      "file": ".github/workflows/automatic-release.yml",
+      "category": "release",
+      "permissions": "write",
+      "trust": "protected branches only",
+      "summary": "Run semantic-release with pinned release tooling."
+    },
+    {
+      "id": "build-and-distribute",
+      "file": ".github/workflows/build-and-distribute.yml",
+      "category": "distribution",
+      "permissions": "write",
+      "trust": "protected branches only",
+      "summary": "Build a compiled branch and upload a guarded package artifact."
+    },
+    {
+      "id": "codeql",
+      "file": ".github/workflows/codeql.yml",
+      "category": "security",
+      "permissions": "security-events write",
+      "trust": "safe default",
+      "summary": "Reusable CodeQL analysis."
+    },
+    {
+      "id": "composer-validate",
+      "file": ".github/workflows/composer-validate.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "safe default",
+      "summary": "Validate Composer metadata and optionally audit dependencies."
+    },
+    {
+      "id": "ddev-playwright",
+      "file": ".github/workflows/ddev-playwright.yml",
+      "category": "browser-test",
+      "permissions": "read",
+      "trust": "custom commands require opt-in",
+      "summary": "Run DDEV-backed Playwright checks with guarded command overrides."
+    },
+    {
+      "id": "deploy-deployer",
+      "file": ".github/workflows/deploy-deployer.yml",
+      "category": "deploy",
+      "permissions": "read",
+      "trust": "GitHub environment protected",
+      "summary": "Run Deployer with pinned known_hosts support and deployment concurrency."
+    },
+    {
+      "id": "javascript-static-analysis",
+      "file": ".github/workflows/javascript-static-analysis.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "custom commands require opt-in",
+      "summary": "Run package static analysis or TypeScript checks."
+    },
+    {
+      "id": "javascript-unit",
+      "file": ".github/workflows/javascript-unit.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "custom commands require opt-in",
+      "summary": "Run JavaScript unit tests with Jest fallback."
+    },
+    {
+      "id": "lint-workflows",
+      "file": ".github/workflows/lint-workflows.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "safe default",
+      "summary": "Run actionlint for caller repositories."
+    },
+    {
+      "id": "php-coding-standards",
+      "file": ".github/workflows/php-coding-standards.yml",
+      "category": "quality",
+      "permissions": "checks write",
+      "trust": "custom commands require opt-in",
+      "summary": "Run PHPCS and optionally annotate checkstyle output."
+    },
+    {
+      "id": "php-static-analysis",
+      "file": ".github/workflows/php-static-analysis.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "custom commands require opt-in",
+      "summary": "Run PHPStan static analysis."
+    },
+    {
+      "id": "php-unit",
+      "file": ".github/workflows/php-unit.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "custom commands require opt-in",
+      "summary": "Run PHPUnit or Composer test scripts."
+    },
+    {
+      "id": "playwright",
+      "file": ".github/workflows/playwright.yml",
+      "category": "browser-test",
+      "permissions": "read",
+      "trust": "inline scripts require opt-in",
+      "summary": "Run runner-based Playwright checks with optional wp-env and ngrok."
+    },
+    {
+      "id": "sympress-qa",
+      "file": ".github/workflows/sympress-qa.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "safe default",
+      "summary": "Discover Composer targets and run matrix QA with PHPCS, PHPStan, and PHPUnit."
+    },
+    {
+      "id": "woo-qit",
+      "file": ".github/workflows/woo-qit.yml",
+      "category": "commerce-test",
+      "permissions": "read",
+      "trust": "pinned QIT ref",
+      "summary": "Run WooCommerce QIT against a generated artifact."
+    },
+    {
+      "id": "wordpress-archive",
+      "file": ".github/workflows/wordpress-archive.yml",
+      "category": "distribution",
+      "permissions": "read",
+      "trust": "guarded artifact upload",
+      "summary": "Create a WordPress plugin or theme artifact with secret-file guards."
+    },
+    {
+      "id": "wp-scripts-lint",
+      "file": ".github/workflows/wp-scripts-lint.yml",
+      "category": "quality",
+      "permissions": "read",
+      "trust": "safe default",
+      "summary": "Run @wordpress/scripts linters."
+    }
+  ]
+}

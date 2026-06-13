@@ -5,10 +5,12 @@
   "license": "MIT",
   "scripts": {
     "lint:docs": "markdownlint-cli2 README.md docs/**/*.md",
-    "lint:workflows": "actionlint"
+    "lint:workflows": "actionlint",
+    "test:contracts": "node scripts/validate-contracts.mjs"
   },
   "devDependencies": {
     "actionlint": "^2.0.6",
-    "markdownlint-cli2": "^0.22.1"
+    "markdownlint-cli2": "^0.22.1",
+    "yaml": "^2.9.0"
   }
 }

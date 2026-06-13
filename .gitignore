@@ -1,4 +1,5 @@
 .DS_Store
+.idea/
 node_modules/
 vendor/
 .phpunit.cache/
@@ -11,4 +12,3 @@ playwright-report/
 test-results/
 *.log
 *.zip
-

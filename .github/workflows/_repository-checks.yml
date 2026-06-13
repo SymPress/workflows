@@ -21,6 +21,21 @@ jobs:
       - name: Run actionlint
         uses: rhysd/actionlint@v1
 
+  workflow-security:
+    name: Audit workflow security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d
+        with:
+          persona: auditor
+          min-severity: medium
+          advanced-security: 'false'
+          annotations: 'true'
+
   docs:
     name: Lint documentation
     runs-on: ubuntu-latest
@@ -40,3 +55,21 @@ jobs:
       - name: Lint Markdown
         run: npm run lint:docs
 
+  contracts:
+    name: Validate workflow contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate contracts
+        run: npm run test:contracts
