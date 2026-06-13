@@ -210,6 +210,7 @@ const sympressQa = read('.github/workflows/sympress-qa.yml');
 assert(sympressQa.includes('strategy:'), 'sympress-qa.yml must use a matrix strategy');
 assert(sympressQa.includes('matrix:'), 'sympress-qa.yml must define a target matrix');
 assert(!sympressQa.includes('for target in "${targets[@]}"'), 'sympress-qa.yml must not run targets serially');
+assert(sympressQa.includes('--ignore=vendor/*,node_modules/*'), 'sympress-qa.yml PHPCS fallback must ignore dependencies');
 
 const deploy = read('.github/workflows/deploy-deployer.yml');
 assert(deploy.includes('environment: ${{ inputs.environment }}'), 'deploy-deployer.yml must bind GitHub environments');

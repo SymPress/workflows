@@ -335,7 +335,7 @@ jobs:
             if [ -f phpcs.xml ] || [ -f phpcs.xml.dist ]; then
               "$phpcs_bin" --standard="$(test -f phpcs.xml && echo phpcs.xml || echo phpcs.xml.dist)"
             else
-              "$phpcs_bin" --standard=PSR12 .
+              "$phpcs_bin" --standard=PSR12 --ignore=vendor/*,node_modules/* .
             fi
           }
 
