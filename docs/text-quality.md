@@ -6,7 +6,7 @@ without mixing them into PHP or JavaScript lint jobs.
 ```yml
 jobs:
   text-quality:
-    uses: sympress/reusable-workflows/.github/workflows/text-quality.yml@v1
+    uses: sympress/workflows/.github/workflows/text-quality.yml@v1
 ```
 
 Defaults run:
@@ -28,4 +28,5 @@ with:
 ```
 
 Grammar review only runs for pull request events so reviewdog can attach useful
-checks to the PR.
+checks to the PR. The grammar review runs in its own job so `pull-requests:
+write` is isolated from the default Typos and CSpell checks.

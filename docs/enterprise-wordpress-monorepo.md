@@ -31,7 +31,7 @@ permissions:
 jobs:
   website-ci:
     name: Website CI
-    uses: sympress/reusable-workflows/.github/workflows/composer-validate.yml@v1
+    uses: sympress/workflows/.github/workflows/composer-validate.yml@v1
     with:
       install: true
       audit: false
@@ -41,7 +41,7 @@ jobs:
 
   package-ci:
     name: Package CI
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       include_root: false
       package_glob: packages/*
@@ -71,11 +71,11 @@ Example for an HTTP basic Composer repository:
 ```
 
 This replaces ad-hoc `composer config --global --auth ...` steps in caller
-workflows and keeps authentication inside the reusable workflow secret contract.
+workflows and keeps authentication inside the called workflow secret contract.
 
 ## Mapping From Legacy Workflows
 
-| Legacy step | Reusable workflow coverage |
+| Legacy step | Workflow coverage |
 | --- | --- |
 | `composer validate` in root | `composer-validate.yml` |
 | root `composer install` | `composer-validate.yml` with `install: true` |

@@ -11,6 +11,6 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'

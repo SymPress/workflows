@@ -1,6 +1,6 @@
 # Release Strategy
 
-Reusable workflows are production infrastructure. Consumers should get stable
+SymPress Workflows are production infrastructure. Consumers should get stable
 tags, clear migration notes, and a fast path for urgent fixes.
 
 ## Versioning
@@ -18,7 +18,7 @@ Production repositories should call workflows with a tag:
 ```yml
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
 ```
 
 Use `@main` only while testing a new workflow or validating an upcoming change.

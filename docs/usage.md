@@ -1,7 +1,7 @@
 # Usage
 
-Reusable workflows are called at job level. The caller repository decides when
-the job runs, which permissions are granted, which inputs are passed, and which
+Workflow calls are made at job level. The caller repository decides when the
+job runs, which permissions are granted, which inputs are passed, and which
 secrets are exposed.
 
 ## Basic Pattern
@@ -9,18 +9,18 @@ secrets are exposed.
 ```yml
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
     secrets:
       COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
 ```
 
-Do not call reusable workflows inside `steps`. Use `jobs.<job_id>.uses`.
+Do not call shared workflows inside `steps`. Use `jobs.<job_id>.uses`.
 
-## GitHub Reusable Workflow Rules
+## GitHub Workflow Call Rules
 
-GitHub evaluates reusable workflows in the caller repository context:
+GitHub evaluates called workflows in the caller repository context:
 
 - the caller decides triggers, permissions, secrets, and inputs;
 - `GITHUB_TOKEN` permissions can be downgraded by the called workflow, not
@@ -32,7 +32,7 @@ GitHub evaluates reusable workflows in the caller repository context:
   use them.
 
 For upstream details, see GitHub's
-[reusable workflow reference](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
+[workflow reuse reference](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
 
 ## Version Pinning
 
@@ -66,6 +66,19 @@ permissions:
   issues: write
   pull-requests: write
 ```
+
+Artifact attestation example:
+
+```yml
+permissions:
+  contents: read
+  actions: read
+  attestations: write
+  id-token: write
+```
+
+Grant attestation permissions only when `artifact_attestation: true` is enabled
+for `wordpress-archive.yml` or `build-and-distribute.yml`.
 
 ## Secrets
 
@@ -109,6 +122,20 @@ with:
 
 Prefer Composer or npm scripts over custom commands when possible.
 
+## Node Lockfiles
+
+Node workflows require one of `pnpm-lock.yaml`, `yarn.lock`,
+`package-lock.json`, or `npm-shrinkwrap.json` before installing dependencies.
+This keeps CI reproducible and makes caches effective.
+
+```yml
+with:
+  allow_unpinned_node_install: true
+```
+
+Use the compatibility switch only for trusted callers that cannot yet commit a
+lockfile.
+
 ## Artifact Policy
 
 Archive workflows exclude secret-like files and validate staged artifacts before
@@ -121,6 +148,8 @@ with:
 ```
 
 Only do this when `.env` is generated for distribution and contains no secrets.
+Archive workflows also add `artifact-manifest.json` and
+`artifact-sha256sums.txt` unless `artifact_manifest: false` is set.
 
 ## Outputs
 
@@ -131,11 +160,11 @@ Archive plus QIT:
 ```yml
 jobs:
   archive:
-    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@v1
 
   qit:
     needs: archive
-    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@v1
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
     secrets:
@@ -150,7 +179,7 @@ Composer package:
 ```yml
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
 ```
 
 WordPress plugin archive:
@@ -158,7 +187,7 @@ WordPress plugin archive:
 ```yml
 jobs:
   archive:
-    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@v1
     with:
       package_version: ${{ github.ref_name }}
 ```
@@ -168,11 +197,11 @@ Focused PHP checks:
 ```yml
 jobs:
   phpcs:
-    uses: sympress/reusable-workflows/.github/workflows/php-coding-standards.yml@v1
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@v1
 
   phpstan:
-    uses: sympress/reusable-workflows/.github/workflows/php-static-analysis.yml@v1
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@v1
 
   phpunit:
-    uses: sympress/reusable-workflows/.github/workflows/php-unit.yml@v1
+    uses: sympress/workflows/.github/workflows/php-unit.yml@v1
 ```

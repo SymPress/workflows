@@ -5,7 +5,7 @@ Use `woo-qit.yml` after an archive or build workflow has uploaded an artifact.
 ```yml
 jobs:
   qit:
-    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@v1
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
       qit_test: activation

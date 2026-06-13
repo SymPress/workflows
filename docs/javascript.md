@@ -3,12 +3,16 @@
 The JavaScript workflows detect npm, yarn, and pnpm from lockfiles and use
 matching dependency caches.
 
+If no JavaScript lockfile exists, workflows fail by default instead of running
+`npm install`. Prefer committing a lockfile. Use
+`allow_unpinned_node_install: true` only for trusted compatibility callers.
+
 ## Static Analysis
 
 ```yml
 jobs:
   static-analysis:
-    uses: sympress/reusable-workflows/.github/workflows/javascript-static-analysis.yml@v1
+    uses: sympress/workflows/.github/workflows/javascript-static-analysis.yml@v1
     with:
       working_directory: packages/example
       script: typecheck
@@ -22,7 +26,7 @@ Custom `command` values require `allow_custom_command: true`.
 ```yml
 jobs:
   unit-js:
-    uses: sympress/reusable-workflows/.github/workflows/javascript-unit.yml@v1
+    uses: sympress/workflows/.github/workflows/javascript-unit.yml@v1
     with:
       script: test
 ```

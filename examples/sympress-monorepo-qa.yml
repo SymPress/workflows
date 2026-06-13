@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       include_root: true
       package_glob: packages/*

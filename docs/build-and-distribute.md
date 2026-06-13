@@ -5,7 +5,7 @@ Use `build-and-distribute.yml` when a source branch should produce a compiled bu
 ```yml
 jobs:
   build:
-    uses: sympress/reusable-workflows/.github/workflows/build-and-distribute.yml@v1
+    uses: sympress/workflows/.github/workflows/build-and-distribute.yml@v1
     with:
       source_branch_prefix: dev/
     secrets:
@@ -46,6 +46,16 @@ with:
 
 Use `artifact_extra_excludes` for project-specific generated files. `.distignore`
 and `artifact_extra_excludes` still win over the default `.env` allowlist.
+
+The uploaded artifact includes `artifact-manifest.json` and
+`artifact-sha256sums.txt` by default and is scanned for common secret-content
+patterns. Disable `artifact_manifest` or `artifact_secret_scan` only for a
+documented trusted release exception.
+
+Set `artifact_attestation: true` to create a GitHub Artifact Attestation for
+the generated `artifact-manifest.json`. The caller job must grant
+`actions: read`, `attestations: write`, and `id-token: write`, and
+`artifact_manifest` must stay enabled.
 
 `pre_script` is disabled by default. Set `allow_inline_scripts: true` only when
 the caller repository is trusted.

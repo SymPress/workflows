@@ -5,10 +5,10 @@
 Check that the caller uses the full workflow path:
 
 ```yml
-uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
 ```
 
-Reusable workflows must live directly in `.github/workflows`.
+Callable workflows must live directly in `.github/workflows`.
 
 ## Workflow Is Not Accessible
 
@@ -18,13 +18,13 @@ Actions policy.
 
 ## Input Is Not Defined
 
-GitHub fails a reusable workflow call when the caller passes an input that the
+GitHub fails a `workflow_call` job when the caller passes an input that the
 called workflow has not declared. Check the workflow-specific docs and the
 workflow file under `.github/workflows`.
 
 ## Secret Is Not Defined
 
-Secrets passed by the caller must match names declared in the reusable workflow.
+Secrets passed by the caller must match names declared in the called workflow.
 Prefer explicit mapping:
 
 ```yml
@@ -43,6 +43,13 @@ the token used for the operation.
 Custom shell commands are disabled by default. Either replace the command with a
 Composer or npm script, or set the matching `allow_*` input in a trusted caller.
 
+## No JavaScript Lockfile Found
+
+Node workflows refuse lockfile-less installs by default. Commit
+`pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`, or `npm-shrinkwrap.json`.
+Use `allow_unpinned_node_install: true` only as a trusted compatibility escape
+hatch.
+
 ## Artifact Contains Blocked Files
 
 Archive workflows fail when staged artifacts contain secret-like files. Remove
@@ -59,6 +66,13 @@ with:
 
 This is expected. Real `.env` files are blocked by default. Add `.env` to
 `artifact_allowed_env_files` only when it is safe to distribute.
+
+## Artifact Attestation Fails
+
+`artifact_attestation: true` requires `artifact_manifest: true`, plus caller
+permissions `actions: read`, `attestations: write`, and `id-token: write`. The
+attestation job downloads the generated artifact and attests exactly one
+`artifact-manifest.json`.
 
 ## Deploy Fails On Known Hosts
 

@@ -1,6 +1,6 @@
 # Security Hardening
 
-This repository treats reusable workflows as shared infrastructure. Defaults
+This repository treats SymPress Workflows as shared infrastructure. Defaults
 should be safe for normal callers and explicit when a caller needs more power.
 
 ## Artifact Policy
@@ -29,6 +29,26 @@ Only add `.env` when the file is generated for distribution and contains no
 secrets. Use `artifact_extra_excludes` for project-specific generated files.
 `.distignore` and `artifact_extra_excludes` win over the default allowlist.
 
+The staged package is also scanned for common secret-content patterns such as
+private key blocks, GitHub tokens, AWS access key IDs, and Slack tokens. Keep
+`artifact_secret_scan` enabled unless a trusted release path has a documented
+false positive.
+
+Artifact workflows add two provenance files by default:
+
+- `artifact-sha256sums.txt` lists SHA256 checksums for staged files.
+- `artifact-manifest.json` records source repository, source ref, source SHA,
+  workflow ref, run ID, package name/folder, and the checksum file name.
+
+Set `artifact_manifest: false` only when a downstream packaging system requires
+an exact legacy artifact shape.
+
+For stronger provenance, set `artifact_attestation: true`. The workflow creates
+a GitHub Artifact Attestation for `artifact-manifest.json`; the manifest then
+anchors the artifact checksums. Caller jobs must grant `actions: read`,
+`attestations: write`, and `id-token: write`, and `artifact_manifest` must
+remain enabled.
+
 ## Shell Inputs
 
 Free-form shell inputs are gated:
@@ -39,6 +59,23 @@ Free-form shell inputs are gated:
 - `allow_custom_deploy_command` for Deployer command overrides.
 
 Leave these disabled for pull-request workflows from untrusted branches.
+
+Argument-like inputs are passed through environment variables and argv arrays
+instead of being interpolated directly into shell scripts.
+
+## Environment Variables
+
+`ENV_VARS` and `DDEV_ENV_VARS` accept JSON object or array formats, but variable
+names must match shell environment variable syntax. Reserved GitHub and runner
+names such as `GITHUB_*`, `ACTIONS_*`, `RUNNER_*`, `PATH`, `BASH_ENV`,
+`LD_PRELOAD`, and `NODE_OPTIONS` are blocked.
+
+## Lockfiles
+
+Node dependency installs use npm, yarn, or pnpm lockfiles. If no lockfile is
+present, workflows fail by default instead of running `npm install`. Set
+`allow_unpinned_node_install: true` only for trusted compatibility callers, and
+prefer adding a lockfile instead.
 
 ## SSH And Deployments
 
@@ -55,10 +92,11 @@ trust-on-first-use behavior.
 - External GitHub Actions are pinned to full commit SHAs with the human-readable
   tag kept as an inline comment.
 - Dependabot monitors GitHub Actions and npm dependencies so pinned refs can be
-  updated through normal pull requests instead of floating tags.
+  updated through grouped pull requests instead of floating tags.
 - `automatic-release.yml` installs pinned semantic-release packages.
 - `woo-qit.yml` downloads QIT from a pinned ref and supports `qit_sha256`.
-- Repository checks include actionlint, contract tests, and zizmor.
+- Repository checks include actionlint, contract tests, doctor gates, and
+  zizmor.
 
 ## Permissions
 

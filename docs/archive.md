@@ -5,7 +5,7 @@ Use `wordpress-archive.yml` for plugin or theme artifacts.
 ```yml
 jobs:
   archive:
-    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@v1
     with:
       package_version: ${{ inputs.version }}
 ```
@@ -18,6 +18,8 @@ The workflow:
 - updates `Version` and optional `SHA` headers;
 - stages the artifact in a stable package folder;
 - applies `.distignore` when present;
+- adds `artifact-manifest.json` and `artifact-sha256sums.txt`;
+- can attest the generated manifest with GitHub Artifact Attestations;
 - uploads the package folder as a GitHub artifact.
 
 ## Artifact Safety
@@ -37,6 +39,15 @@ with:
 
 Use `artifact_extra_excludes` for project-specific generated files. `.distignore`
 and `artifact_extra_excludes` still win over the default `.env` allowlist.
+
+The staged package is scanned for common secret-content patterns before upload.
+Set `artifact_secret_scan: false` only for a documented false positive in a
+trusted release path.
+
+Set `artifact_attestation: true` to create a GitHub Artifact Attestation for
+`artifact-manifest.json`. The caller job must grant `actions: read`,
+`attestations: write`, and `id-token: write`, and `artifact_manifest` must stay
+enabled.
 
 `pre_script` is disabled by default. Set `allow_inline_scripts: true` only when
 the caller repository is trusted.

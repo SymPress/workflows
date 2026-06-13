@@ -1,16 +1,16 @@
 # Installation
 
-This repository is a normal GitHub repository that stores reusable workflows in
-`.github/workflows`. A workflow becomes reusable when it defines
+This repository is a normal GitHub repository that stores callable workflows in
+`.github/workflows`. A workflow becomes callable when it defines
 `on.workflow_call`. See GitHub's
-[reuse workflows documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
+[workflow reuse documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
 and [`workflow_call` syntax reference](https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions#onworkflow_call)
 for the upstream rules.
 
 ## Repository Setup
 
-1. Create the repository as `sympress/reusable-workflows`.
-2. Keep all reusable workflow files directly in `.github/workflows`.
+1. Create the repository as `sympress/workflows`.
+2. Keep all `workflow_call` files directly in `.github/workflows`.
 3. Push the repository to GitHub.
 4. Run repository checks on `main`.
 5. Create a release tag before production consumers adopt it.
@@ -25,12 +25,12 @@ git push origin v1.0.0
 Production callers should use a tag or commit SHA instead of `@main`.
 
 If the repository lives under another owner or name, replace
-`sympress/reusable-workflows` in all caller examples with the actual
+`sympress/workflows` in all caller examples with the actual
 `owner/repository` value.
 
 ## Visibility And Access
 
-Public repositories can call public reusable workflows directly when the
+Public repositories can call public workflow files directly when the
 organization allows public GitHub Actions usage.
 
 For private or internal use, configure the workflow repository:
@@ -41,7 +41,7 @@ For private or internal use, configure the workflow repository:
    repositories in the organization.
 4. Save the setting.
 
-Caller repositories must also allow the selected actions and reusable workflows
+Caller repositories must also allow the selected actions and workflow calls
 under their own `Settings -> Actions -> General` policy.
 
 GitHub documents the private repository access flow in
@@ -67,10 +67,22 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
 ```
+
+Before or after adding caller workflows, run the local doctor against the
+consumer checkout:
+
+```bash
+npm run doctor -- /path/to/consumer-repository
+npm run doctor -- --fail-on high /path/to/consumer-repository
+```
+
+It reports recommended workflows, missing lockfiles, broad permissions,
+`@main` pins, inherited secrets, and shell override inputs. Use `--fail-on`
+when the doctor should gate adoption in CI; use `--format json` for automation.
 
 ## Required Consumer Secrets
 
@@ -100,8 +112,10 @@ For consumer repositories:
 - Require the relevant QA jobs before merging to `main`.
 - Require deployments to use GitHub environments for approval gates.
 - Keep write workflows off untrusted pull requests.
+- Grant `actions: read`, `attestations: write`, and `id-token: write` only to
+  jobs that enable `artifact_attestation`.
 
-For this reusable workflow repository:
+For this workflow repository:
 
 - Require `Repository checks`.
 - Require review for changes under `.github/workflows`.

@@ -9,13 +9,13 @@ permissions:
 
 jobs:
   archive:
-    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@v1
     with:
       package_version: ${{ github.ref_name }}
 
   qit:
     needs: archive
-    uses: sympress/reusable-workflows/.github/workflows/woo-qit.yml@v1
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@v1
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
       qit_test: activation

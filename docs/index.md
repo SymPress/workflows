@@ -11,6 +11,9 @@ Start here when adopting or maintaining the workflow set.
 - [Consumer Setup Checklist](consumer-setup.md): step-by-step onboarding for a
   project repository.
 - [Decision Guide](decision-guide.md): choose the smallest useful workflow.
+- `npm run doctor -- <repo>`: scan a consumer repository for workflow
+  recommendations, risky caller patterns, missing lockfiles, and baseline
+  permissions.
 - [Enterprise WordPress Monorepo QA](enterprise-wordpress-monorepo.md): root
   application install plus dynamic package QA.
 - [Troubleshooting](troubleshooting.md): common GitHub Actions and workflow

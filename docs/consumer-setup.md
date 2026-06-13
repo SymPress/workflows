@@ -4,6 +4,13 @@ Use this checklist when onboarding a project repository.
 
 ## 1. Choose Workflows
 
+Run the doctor from this repository when a consumer is not obvious:
+
+```bash
+npm run doctor -- /path/to/consumer-repository
+npm run doctor -- --fail-on high /path/to/consumer-repository
+```
+
 - Composer package or monorepo: `sympress-qa.yml`
 - Separate required checks: focused PHP and JavaScript workflows
 - WordPress archive: `wordpress-archive.yml`
@@ -18,7 +25,7 @@ See [Decision Guide](decision-guide.md) for selection details.
 ## 2. Add Caller Workflow Files
 
 Create small caller files in `.github/workflows`. Keep triggers in the caller
-repository, not in this reusable workflow repository.
+repository, not in the SymPress Workflows repository.
 
 Example:
 
@@ -36,7 +43,7 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
 ```
 
 ## 3. Configure Secrets
@@ -97,6 +104,16 @@ permissions:
   pull-requests: write
 ```
 
+Artifact attestation opt-in:
+
+```yml
+permissions:
+  contents: read
+  actions: read
+  attestations: write
+  id-token: write
+```
+
 ## 5. Add Branch Protection
 
 Require the caller jobs that matter:
@@ -112,10 +129,14 @@ Require the caller jobs that matter:
 
 Open a small pull request that only adds workflow files. Verify:
 
-- reusable workflow access works;
+- workflow-call access works;
+- Node projects have a committed lockfile or a documented
+  `allow_unpinned_node_install` exception;
 - secrets are available only where expected;
 - required checks have stable names;
 - artifacts contain no blocked files;
+- `artifact_attestation: true` is used only when the caller grants attestation
+  permissions;
 - release and deploy workflows are not triggered by pull requests.
 
 ## 7. Pin And Upgrade

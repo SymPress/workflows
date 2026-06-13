@@ -1,7 +1,13 @@
-# SymPress Reusable Workflows
+# SymPress Workflows
 
-Reusable GitHub Actions workflows for SymPress packages, WordPress projects,
-and Composer-first monorepos.
+[![Repository checks](https://github.com/sympress/workflows/actions/workflows/_repository-checks.yml/badge.svg)](https://github.com/sympress/workflows/actions/workflows/_repository-checks.yml)
+[![CodeQL](https://github.com/sympress/workflows/actions/workflows/codeql.yml/badge.svg)](https://github.com/sympress/workflows/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sympress/workflows?display_name=tag&sort=semver)](https://github.com/sympress/workflows/releases)
+[![Security policy](https://img.shields.io/badge/security-policy-brightgreen.svg)](SECURITY.md)
+
+GitHub Actions workflows for SymPress packages, WordPress projects, and
+Composer-first monorepos.
 
 ## Why this repo exists
 
@@ -10,6 +16,18 @@ PHPCS, PHPStan, PHPUnit, asset builds, WordPress archives, Playwright checks,
 semantic releases, and optional deployments. This repository keeps those
 workflows in one place so project repositories only describe when automation
 should run and which inputs differ.
+
+## Why teams can trust it
+
+- External GitHub Actions are pinned to full commit SHAs.
+- Repository checks run actionlint, zizmor, contract tests, docs linting, and
+  fixture workflows.
+- Workflow defaults use least-privilege permissions and lockfile-first installs.
+- Shell-command escape hatches require explicit `allow_*` inputs.
+- Release, archive, and artifact flows include manifest, checksum, secret-scan,
+  and optional attestation controls.
+- Community health files, issue templates, pull request checklist, security
+  policy, support guide, and CODEOWNERS are included.
 
 ## Feature Set
 
@@ -24,11 +42,15 @@ should run and which inputs differ.
   artifacts.
 - WordPress plugin/theme archive creation with `.distignore` support.
 - Artifact-level WordPress archive checks before release or QIT.
+- Artifact manifests, checksums, and secret-content scans for distributable
+  packages.
+- Optional GitHub Artifact Attestations for distributable package manifests.
 - Semantic release with a built-in fallback release config.
 - Deployer-based deployments.
 - Playwright and DDEV Playwright workflows, including optional ngrok support.
 - WooCommerce QIT workflow for extension archives.
-- CodeQL workflow for reusable PHP security scanning.
+- Consumer repository diagnostics through `npm run doctor -- <repo>`.
+- CodeQL workflow for PHP security scanning.
 - Contract tests, zizmor checks, and a workflow catalog for repository-level
   governance.
 
@@ -37,7 +59,7 @@ should run and which inputs differ.
 Set up this repository once, then add small caller workflow files to consumer
 repositories.
 
-1. Push this repository to GitHub as `sympress/reusable-workflows`.
+1. Push this repository to GitHub as `sympress/workflows`.
 2. If the repository is private or internal, allow access under
    `Settings -> Actions -> General -> Access`.
 3. Create a release tag, for example `v1.0.0`.
@@ -67,12 +89,12 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
 ```
 
-Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
+Workflow calls are made at job level with `jobs.<job_id>.uses`. See
 [Usage](docs/usage.md) for permissions, secrets, outputs, and common recipes.
 
 ## Documentation
@@ -113,6 +135,13 @@ Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
   and supply-chain defaults.
 - [Release strategy](docs/release-strategy.md) for tags and migration policy.
 
+## Project Health
+
+- [Security policy](SECURITY.md) for private vulnerability reporting.
+- [Support guide](SUPPORT.md) for adoption and troubleshooting requests.
+- [Contributing guide](CONTRIBUTING.md) for pull request expectations.
+- [Code of conduct](CODE_OF_CONDUCT.md) for community standards.
+
 ## Design Defaults
 
 - PHP 8.5, Composer 2, and Node 24.
@@ -123,9 +152,18 @@ Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
   repositories are copied into distributable builds instead of symlinked.
 - Workflows use read-only repository permissions unless they push, release, or
   deploy.
+- Node workflows require a lockfile by default. Set
+  `allow_unpinned_node_install: true` only for trusted compatibility callers.
 - Artifact workflows block secret-like files by default. `.env.example` and
   `.env.dist` are allowed; a real `.env` must be explicitly allowlisted when it
   is intentionally non-secret.
+- Artifact workflows add `artifact-manifest.json` and
+  `artifact-sha256sums.txt` by default.
+- Artifact workflows can attest the generated manifest with
+  `artifact_attestation: true` when callers grant `actions: read`,
+  `attestations: write`, and `id-token: write`.
 - Free-form shell inputs are disabled by default and require an explicit
   `allow_*` input.
+- JSON `ENV_VARS` names are validated and reserved GitHub/runner variables are
+  blocked.
 - Node workflows detect npm, yarn, and pnpm lockfiles for dependency caching.

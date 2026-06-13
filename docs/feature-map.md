@@ -14,7 +14,7 @@ The workflow set covers the full automation surface SymPress projects currently 
 - `wp-scripts-lint.yml`: `@wordpress/scripts` linting for JS, styles, docs, and package metadata.
 - `text-quality.yml`: Typos, CSpell, and optional PR grammar review.
 - `lint-workflows.yml`: actionlint for GitHub Actions workflow files.
-- `codeql.yml`: reusable CodeQL scanning.
+- `codeql.yml`: CodeQL scanning.
 
 ## Build, Release, Distribution
 
@@ -37,10 +37,18 @@ The workflow set covers the full automation surface SymPress projects currently 
 - Package workflows expose `working_directory`.
 - Monorepo QA discovers root and `packages/*` packages.
 - Optional JSON `ENV_VARS` supports both object and array formats.
+- JSON environment variable names are validated and reserved runner variables
+  are blocked.
 - Secrets are optional unless a workflow cannot work without them.
 - Build workflows avoid same-branch writes unless explicitly allowed.
 - `.distignore` is supported for package artifacts.
 - Artifact workflows block secret-like files and validate staged packages.
+- Artifact workflows generate manifests and checksum files by default.
+- Artifact workflows can create GitHub Artifact Attestations for generated
+  manifests.
 - Shell command overrides are disabled unless a caller opts in explicitly.
-- Node workflows use npm, yarn, or pnpm lockfiles for dependency caching.
+- Node workflows use npm, yarn, or pnpm lockfiles for dependency caching and
+  reject lockfile-less installs unless explicitly allowed.
+- `npm run doctor -- <repo>` provides consumer onboarding diagnostics, JSON
+  output, and optional `--fail-on` CI gating.
 - `workflow-catalog.json` documents trust level, category, and permissions.

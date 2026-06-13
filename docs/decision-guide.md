@@ -39,5 +39,5 @@ repositories where maintainers control the called workflow inputs.
 - Use `deploy-deployer.yml` for Deployer-based environments.
 - Use `woo-qit.yml` after an archive workflow for WooCommerce extensions.
 
-Pin reusable workflow calls to release tags for production repositories.
+Pin SymPress Workflow calls to release tags for production repositories.
 Use `@main` only while adopting or testing the workflow set.

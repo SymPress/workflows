@@ -7,7 +7,7 @@ Focused PHP workflows are available when a repository wants separate jobs instea
 ```yml
 jobs:
   composer:
-    uses: sympress/reusable-workflows/.github/workflows/composer-validate.yml@v1
+    uses: sympress/workflows/.github/workflows/composer-validate.yml@v1
 ```
 
 ## Coding Standards
@@ -15,7 +15,7 @@ jobs:
 ```yml
 jobs:
   phpcs:
-    uses: sympress/reusable-workflows/.github/workflows/php-coding-standards.yml@v1
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@v1
     with:
       working_directory: packages/kernel
 ```
@@ -31,7 +31,7 @@ manual runs keep regular PHPCS output.
 ```yml
 jobs:
   static-analysis:
-    uses: sympress/reusable-workflows/.github/workflows/php-static-analysis.yml@v1
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@v1
 ```
 
 Auto-detection prefers Composer scripts `cs:analyze`, `phpstan`, `stan`, and
@@ -45,7 +45,7 @@ exercise Composer dependency bounds instead of the lock file.
 ```yml
 jobs:
   unit:
-    uses: sympress/reusable-workflows/.github/workflows/php-unit.yml@v1
+    uses: sympress/workflows/.github/workflows/php-unit.yml@v1
 ```
 
 Auto-detection prefers Composer scripts `test:unit`, `test`, and `tests`, then falls back to PHPUnit config files.

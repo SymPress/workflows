@@ -14,6 +14,8 @@ Run all repository checks:
 npm run test:contracts
 npm run lint:workflows
 npm run lint:docs
+npm run doctor:repo
+npm run doctor -- --fail-on high fixtures/wp-plugin
 npm audit --audit-level=moderate
 ```
 
@@ -21,20 +23,26 @@ npm audit --audit-level=moderate
 
 | Path | Purpose |
 | --- | --- |
-| `.github/workflows` | Reusable workflows and repository checks. |
+| `.github/workflows` | Callable workflows and repository checks. |
 | `docs` | User-facing documentation. |
 | `examples` | Copyable caller workflow examples. |
 | `fixtures` | Minimal projects used by contract tests and policy examples. |
+| `scripts/doctor.mjs` | Consumer repository diagnostics and workflow recommendations. |
 | `scripts/validate-contracts.mjs` | Structural workflow and documentation checks. |
 | `workflow-catalog.json` | Workflow category, trust, and permission catalog. |
 
 ## Change Rules
 
-- Keep reusable workflows directly under `.github/workflows`.
-- Every reusable workflow must use `workflow_call`.
+- Keep callable workflows directly under `.github/workflows`.
+- Every shared workflow must use `workflow_call`.
 - Default to `permissions: contents: read`.
 - Gate free-form shell inputs with an explicit `allow_*` input.
+- Do not interpolate workflow inputs directly into `run` scripts.
+- Keep lockfile-less Node installs behind `allow_unpinned_node_install`.
 - Keep artifact uploads hidden-file-safe by default.
+- Keep artifact manifest and secret-content scanning enabled by default.
+- Keep artifact attestation opt-in and isolated to jobs with attestation
+  permissions.
 - Do not reintroduce removed static-analysis or generic PHP lint workflows.
 - Update docs and examples with every workflow input or behavior change.
 - Update `workflow-catalog.json` when workflows are added, renamed, or removed.

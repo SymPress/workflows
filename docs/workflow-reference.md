@@ -15,7 +15,7 @@ workflow-specific document.
 | `javascript-static-analysis.yml` | TypeScript or static analysis scripts | `contents: read` | None |
 | `javascript-unit.yml` | JavaScript tests | `contents: read` | None |
 | `wp-scripts-lint.yml` | `@wordpress/scripts` linting | `contents: read` | None |
-| `text-quality.yml` | Spelling and optional grammar review | `contents: read`, `checks: write`, `pull-requests: write` | None |
+| `text-quality.yml` | Spelling and optional grammar review | `contents: read`, `checks: write`; grammar job adds `pull-requests: write` | None |
 | `lint-workflows.yml` | actionlint in consumers | `contents: read` | None |
 | `codeql.yml` | CodeQL | `security-events: write` | None |
 
@@ -53,6 +53,13 @@ Prefer `wordpress-archive.yml` unless the project truly needs a build branch.
 | `allow_custom_deploy_command` | Deploy | Allows non-default Deployer command. |
 | `allow_ssh_keyscan` | Deploy | Allows trust-on-first-use host key scan. |
 | `allow_github_ssh_keyscan` | Build and distribute | Allows trust-on-first-use for GitHub SSH push. |
+| `allow_unpinned_node_install` | Node, archive, build, Playwright | Allows `npm install` when no lockfile exists. |
 | `artifact_allowed_env_files` | Archive, build | Allows selected `.env*` files into artifacts. |
+| `artifact_secret_scan` | Archive, build | Allows disabling the default secret-content scan. |
+| `artifact_manifest` | Archive, build | Allows disabling generated manifest and checksum files. |
+| `artifact_attestation` | Archive, build | Creates a GitHub Artifact Attestation for the generated manifest. |
 
 Keep these disabled for untrusted pull request paths.
+
+`artifact_attestation` also requires caller permissions `actions: read`,
+`attestations: write`, and `id-token: write`.

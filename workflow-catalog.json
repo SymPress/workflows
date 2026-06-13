@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "repository": "sympress/reusable-workflows",
+  "repository": "sympress/workflows",
   "workflows": [
     {
       "id": "repository-checks",
@@ -8,7 +8,7 @@
       "category": "governance",
       "permissions": "read",
       "trust": "maintainer workflow",
-      "summary": "Lint workflows, lint docs, audit workflow security, and validate contracts."
+      "summary": "Lint workflows, lint docs, audit workflow security, validate contracts, and run fixture workflows."
     },
     {
       "id": "assets-build",
@@ -32,7 +32,7 @@
       "category": "distribution",
       "permissions": "write",
       "trust": "protected branches only",
-      "summary": "Build a compiled branch and upload a guarded package artifact."
+      "summary": "Build a compiled branch and upload a guarded package artifact with manifest, secret scanning, and optional attestation."
     },
     {
       "id": "codeql",
@@ -40,7 +40,7 @@
       "category": "security",
       "permissions": "security-events write",
       "trust": "safe default",
-      "summary": "Reusable CodeQL analysis."
+      "summary": "CodeQL analysis for PHP projects."
     },
     {
       "id": "composer-validate",
@@ -120,7 +120,7 @@
       "category": "browser-test",
       "permissions": "read",
       "trust": "inline scripts require opt-in",
-      "summary": "Run runner-based Playwright checks with optional wp-env and ngrok."
+      "summary": "Run runner-based Playwright checks with lockfile installs, browser cache, optional wp-env, and ngrok."
     },
     {
       "id": "sympress-qa",
@@ -152,7 +152,7 @@
       "category": "distribution",
       "permissions": "read",
       "trust": "guarded artifact upload",
-      "summary": "Create a WordPress plugin or theme artifact with secret-file guards."
+      "summary": "Create a WordPress plugin or theme artifact with secret-file guards, manifest, secret scanning, and optional attestation."
     },
     {
       "id": "wordpress-archive-check",

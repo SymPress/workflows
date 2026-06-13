@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   e2e:
-    uses: sympress/reusable-workflows/.github/workflows/ddev-playwright.yml@v1
+    uses: sympress/workflows/.github/workflows/ddev-playwright.yml@v1
     with:
       php_version: '8.5'
       node_version: '24'

@@ -5,7 +5,7 @@ Use `assets-build.yml` for Composer asset compiler builds, Node builds, or both.
 ```yml
 jobs:
   assets:
-    uses: sympress/reusable-workflows/.github/workflows/assets-build.yml@v1
+    uses: sympress/workflows/.github/workflows/assets-build.yml@v1
     with:
       working_directory: .
       run_asset_compiler: true
@@ -21,6 +21,11 @@ The workflow:
 - installs npm/yarn/pnpm dependencies when `package.json` exists;
 - runs the configured build script when present;
 - optionally uploads build output as an artifact.
+
+Node installs require `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`, or
+`npm-shrinkwrap.json` by default. Add a lockfile instead of enabling
+`allow_unpinned_node_install` unless the caller is a trusted compatibility
+workflow.
 
 Hidden files are excluded from uploaded artifacts unless
 `artifact_include_hidden_files: true` is set explicitly.
