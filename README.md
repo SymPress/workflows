@@ -27,6 +27,27 @@ should run and which inputs differ.
 - Playwright and DDEV Playwright workflows, including optional ngrok support.
 - WooCommerce QIT workflow for extension archives.
 - CodeQL workflow for reusable PHP security scanning.
+- Contract tests, zizmor checks, and a workflow catalog for repository-level
+  governance.
+
+## Quick Start
+
+Set up this repository once, then add small caller workflow files to consumer
+repositories.
+
+1. Push this repository to GitHub as `sympress/reusable-workflows`.
+2. If the repository is private or internal, allow access under
+   `Settings -> Actions -> General -> Access`.
+3. Create a release tag, for example `v1.0.0`.
+4. Add a caller workflow in a consumer repository.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+See [Installation](docs/installation.md) for the full repository and access
+setup.
 
 ## Calling a workflow
 
@@ -44,18 +65,31 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
 ```
 
-Pin production repositories to a release tag once this repository starts
-publishing tagged releases.
+Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
+[Usage](docs/usage.md) for permissions, secrets, outputs, and common recipes.
 
-## Recommended Workflows
+## Documentation
+
+- [Documentation index](docs/index.md) for all guides.
+- [Installation](docs/installation.md) for repository setup, private access,
+  release tags, first consumer workflow, and secrets.
+- [Usage](docs/usage.md) for day-to-day workflow calls.
+- [Consumer setup checklist](docs/consumer-setup.md) for onboarding a project.
+- [Workflow reference](docs/workflow-reference.md) for operators.
+- [Troubleshooting](docs/troubleshooting.md) for common GitHub Actions errors.
+- [Maintainer guide](docs/maintainer-guide.md) for changing this repository.
+
+## Workflow Guides
 
 - [SymPress QA](docs/sympress-qa.md) for Composer projects and package
   monorepos.
+- [Decision guide](docs/decision-guide.md) for choosing the smallest useful
+  workflow.
 - [Feature map](docs/feature-map.md) for the complete workflow coverage.
 - [PHP](docs/php.md) for focused PHPCS, PHPStan, and PHPUnit jobs.
 - [JavaScript](docs/javascript.md) for static analysis and unit tests.
@@ -69,6 +103,9 @@ publishing tagged releases.
   for browser tests.
 - [Deployment](docs/deploy.md) for Deployer-based releases.
 - [Woo QIT](docs/woo-qit.md) for WooCommerce extension checks.
+- [Security hardening](docs/security-hardening.md) for artifact, shell, SSH,
+  and supply-chain defaults.
+- [Release strategy](docs/release-strategy.md) for tags and migration policy.
 
 ## Design Defaults
 
@@ -80,3 +117,9 @@ publishing tagged releases.
   repositories are copied into distributable builds instead of symlinked.
 - Workflows use read-only repository permissions unless they push, release, or
   deploy.
+- Artifact workflows block secret-like files by default. `.env.example` and
+  `.env.dist` are allowed; a real `.env` must be explicitly allowlisted when it
+  is intentionally non-secret.
+- Free-form shell inputs are disabled by default and require an explicit
+  `allow_*` input.
+- Node workflows detect npm, yarn, and pnpm lockfiles for dependency caching.
