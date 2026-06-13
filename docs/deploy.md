@@ -27,3 +27,12 @@ fallback is disabled unless `allow_ssh_keyscan: true` is set.
 
 Custom `deploy_command` values require `allow_custom_deploy_command: true`.
 Keep the default command for normal deployments.
+
+Outputs exposed to caller workflows:
+
+| Output | Description |
+| --- | --- |
+| `deploy_exit_code` | Deployer process exit code. |
+| `deploy_reason` | Short parsed deployment result. |
+| `deploy_warnings` | Warning-like lines parsed from Deployer output. |
+| `deploy_log_excerpt` | Last lines of Deployer output for notifications. |

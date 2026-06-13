@@ -97,6 +97,19 @@ on:
       NPM_REGISTRY_TOKEN:
         description: npm registry token.
         required: false
+    outputs:
+      deploy_exit_code:
+        description: Deployer process exit code.
+        value: ${{ jobs.deploy.outputs.deploy_exit_code }}
+      deploy_reason:
+        description: Human-readable deployment result.
+        value: ${{ jobs.deploy.outputs.deploy_reason }}
+      deploy_warnings:
+        description: Warning lines parsed from Deployer output.
+        value: ${{ jobs.deploy.outputs.deploy_warnings }}
+      deploy_log_excerpt:
+        description: Last lines from Deployer output.
+        value: ${{ jobs.deploy.outputs.deploy_log_excerpt }}
 
 permissions:
   contents: read
@@ -110,6 +123,11 @@ jobs:
     concurrency:
       group: deploy-${{ github.repository }}-${{ inputs.environment }}
       cancel-in-progress: false
+    outputs:
+      deploy_exit_code: ${{ steps.run-deployer.outputs.exit_code }}
+      deploy_reason: ${{ steps.run-deployer.outputs.reason }}
+      deploy_warnings: ${{ steps.run-deployer.outputs.warnings }}
+      deploy_log_excerpt: ${{ steps.run-deployer.outputs.log_excerpt }}
     env:
       COMPOSER_NO_DEV: 1
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
@@ -279,6 +297,8 @@ jobs:
           ssh-keyscan -p "$port" "$DEPLOY_HOSTNAME" >> ~/.ssh/known_hosts
 
       - name: Run Deployer
+        id: run-deployer
+        continue-on-error: true
         working-directory: ${{ inputs.deployment_directory }}
         shell: bash
         env:
@@ -306,7 +326,37 @@ jobs:
             exit 1
           fi
 
-          bash -lc "$DEPLOY_COMMAND $DEPLOY_ENVIRONMENT -$DEPLOY_VERBOSITY"
+          set +e
+          log_file="${RUNNER_TEMP}/deployer.log"
+          bash -lc "$DEPLOY_COMMAND $DEPLOY_ENVIRONMENT -$DEPLOY_VERBOSITY" 2>&1 | tee "$log_file"
+          exit_code="${PIPESTATUS[0]}"
+          set -e
+
+          warnings="$(grep -Ei '(^|[[:space:]])(warning|warn|deprecated|notice)(:|\\])' "$log_file" || true)"
+          if [ "$exit_code" -eq 0 ]; then
+            reason="Deployment completed successfully."
+          elif [ "$exit_code" -eq 2 ]; then
+            reason="$(printf '%s\n' "$warnings" | head -n 1)"
+            reason="${reason:-Deployment completed with warnings.}"
+          else
+            reason="$(grep -Ei '(^|[[:space:]])(error|critical|failed)(:|\\])' "$log_file" | head -n 1 || true)"
+            reason="${reason:-Deployment failed.}"
+          fi
+
+          {
+            echo "exit_code=$exit_code"
+            echo "reason<<DEPLOY_REASON"
+            printf '%s\n' "$reason"
+            echo "DEPLOY_REASON"
+            echo "warnings<<DEPLOY_WARNINGS"
+            printf '%s\n' "$warnings" | head -n 40
+            echo "DEPLOY_WARNINGS"
+            echo "log_excerpt<<DEPLOY_LOG"
+            tail -n 120 "$log_file"
+            echo "DEPLOY_LOG"
+          } >> "$GITHUB_OUTPUT"
+
+          exit "$exit_code"
 
       - name: Stop WireGuard
         if: ${{ always() }}
@@ -314,3 +364,13 @@ jobs:
           if [ -f /etc/wireguard/wg0.conf ]; then
             sudo wg-quick down wg0 || true
           fi
+
+      - name: Fail on Deployer result
+        if: ${{ always() && steps.run-deployer.outputs.exit_code != '' && steps.run-deployer.outputs.exit_code != '0' }}
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.run-deployer.outputs.exit_code }}
+          DEPLOY_REASON: ${{ steps.run-deployer.outputs.reason }}
+        run: |
+          echo "::error::${DEPLOY_REASON}"
+          exit "$EXIT_CODE"
