@@ -30,6 +30,7 @@ Start here when adopting or maintaining the workflow set.
 - [PHP Workflows](php.md)
 - [JavaScript Workflows](javascript.md)
 - [WordPress Scripts Lint](wp-scripts.md)
+- [Text Quality](text-quality.md)
 - [Asset Builds](assets.md)
 - [WordPress Archive](archive.md)
 - [Build And Distribute](build-and-distribute.md)

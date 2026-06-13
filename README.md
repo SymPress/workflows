@@ -17,6 +17,7 @@ should run and which inputs differ.
 - SymPress package QA for root projects and `packages/*` monorepos.
 - JavaScript static analysis and unit tests with npm, yarn, or pnpm detection.
 - `@wordpress/scripts` linting for JS, styles, Markdown, and `package.json`.
+- Text quality checks with Typos, CSpell, and optional grammar review.
 - GitHub Actions linting through actionlint.
 - Composer-aware asset builds for `sympress/asset-compiler` projects.
 - Build-and-distribute workflow for compiled build branches and downloadable
@@ -96,6 +97,7 @@ Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
 - [PHP](docs/php.md) for focused PHPCS, PHPStan, and PHPUnit jobs.
 - [JavaScript](docs/javascript.md) for static analysis and unit tests.
 - [WordPress scripts](docs/wp-scripts.md) for `@wordpress/scripts` linting.
+- [Text quality](docs/text-quality.md) for spelling and optional grammar checks.
 - [Assets](docs/assets.md) for `sympress/asset-compiler` and npm builds.
 - [Build and distribute](docs/build-and-distribute.md) for compiled build
   branches and artifacts.

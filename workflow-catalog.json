@@ -131,6 +131,14 @@
       "summary": "Discover Composer targets and run matrix QA with PHPCS, PHPStan, and PHPUnit."
     },
     {
+      "id": "text-quality",
+      "file": ".github/workflows/text-quality.yml",
+      "category": "quality",
+      "permissions": "checks write",
+      "trust": "safe default",
+      "summary": "Run Typos, CSpell, and optional pull request grammar review."
+    },
+    {
       "id": "woo-qit",
       "file": ".github/workflows/woo-qit.yml",
       "category": "commerce-test",

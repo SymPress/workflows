@@ -1,0 +1,101 @@
+name: Text quality
+
+on:
+  workflow_call:
+    inputs:
+      run_typos:
+        description: Run typos for fast typo detection.
+        type: boolean
+        default: true
+        required: false
+      typos_files:
+        description: Files or patterns passed to typos.
+        type: string
+        default: .
+        required: false
+      typos_config:
+        description: Optional typos configuration file.
+        type: string
+        default: ''
+        required: false
+      run_cspell:
+        description: Run CSpell for project vocabulary checks.
+        type: boolean
+        default: true
+        required: false
+      cspell_files:
+        description: Newline-separated glob patterns passed to CSpell.
+        type: string
+        default: '**/*.{php,js,jsx,ts,tsx,md,txt,json,yml,yaml}'
+        required: false
+      cspell_config:
+        description: Optional CSpell configuration file.
+        type: string
+        default: ''
+        required: false
+      cspell_incremental_files_only:
+        description: Check only changed files on pull_request or push events.
+        type: boolean
+        default: true
+        required: false
+      run_grammar:
+        description: Run LanguageTool grammar review on pull requests.
+        type: boolean
+        default: false
+        required: false
+      grammar_patterns:
+        description: Space-separated markdown or text glob patterns for LanguageTool.
+        type: string
+        default: '**/*.md **/*.txt'
+        required: false
+      grammar_language:
+        description: LanguageTool language code.
+        type: string
+        default: en-US
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 10
+        required: false
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  text-quality:
+    name: Text quality
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Run typos
+        if: ${{ inputs.run_typos }}
+        uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1
+        with:
+          files: ${{ inputs.typos_files }}
+          config: ${{ inputs.typos_config }}
+
+      - name: Run CSpell
+        if: ${{ inputs.run_cspell }}
+        uses: streetsidesoftware/cspell-action@76c6f6d52abd57f4bcab5f3fde1bbd4f19a99eb0 # v7
+        with:
+          files: ${{ inputs.cspell_files }}
+          config: ${{ inputs.cspell_config }}
+          incremental_files_only: ${{ inputs.cspell_incremental_files_only }}
+          inline: warning
+          strict: true
+
+      - name: Run grammar review
+        if: ${{ inputs.run_grammar && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
+        uses: reviewdog/action-languagetool@afd06e9b0f782c9562c92efffb66a49c09b2b4f4 # v1
+        with:
+          github_token: ${{ github.token }}
+          reporter: github-pr-check
+          level: warning
+          patterns: ${{ inputs.grammar_patterns }}
+          language: ${{ inputs.grammar_language }}

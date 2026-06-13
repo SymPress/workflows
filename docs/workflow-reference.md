@@ -15,6 +15,7 @@ workflow-specific document.
 | `javascript-static-analysis.yml` | TypeScript or static analysis scripts | `contents: read` | None |
 | `javascript-unit.yml` | JavaScript tests | `contents: read` | None |
 | `wp-scripts-lint.yml` | `@wordpress/scripts` linting | `contents: read` | None |
+| `text-quality.yml` | Spelling and optional grammar review | `contents: read`, `checks: write`, `pull-requests: write` | None |
 | `lint-workflows.yml` | actionlint in consumers | `contents: read` | None |
 | `codeql.yml` | CodeQL | `security-events: write` | None |
 

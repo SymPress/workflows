@@ -12,6 +12,7 @@ The workflow set covers the full automation surface SymPress projects currently 
 - `javascript-static-analysis.yml`: TypeScript or package script static analysis.
 - `javascript-unit.yml`: package test script or Jest fallback.
 - `wp-scripts-lint.yml`: `@wordpress/scripts` linting for JS, styles, docs, and package metadata.
+- `text-quality.yml`: Typos, CSpell, and optional PR grammar review.
 - `lint-workflows.yml`: actionlint for GitHub Actions workflow files.
 - `codeql.yml`: reusable CodeQL scanning.
 
