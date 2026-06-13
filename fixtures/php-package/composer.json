@@ -1,6 +1,7 @@
 {
   "name": "sympress/fixture-php-package",
   "type": "library",
+  "license": "proprietary",
   "require-dev": {
     "phpstan/phpstan": "^2.1",
     "squizlabs/php_codesniffer": "^3.13",
