@@ -142,4 +142,4 @@ Open a small pull request that only adds workflow files. Verify:
 ## 7. Pin And Upgrade
 
 Start with `@v1` after the first stable release. For stricter repositories, pin
-to `@v1.0.0` or a commit SHA. Upgrade one repository first, then roll out.
+to `@1.0.0` or a commit SHA. Upgrade one repository first, then roll out.

@@ -41,7 +41,7 @@ Use these refs intentionally:
 | Ref | Use case |
 | --- | --- |
 | `@v1` | Normal production pin for a major release line. |
-| `@v1.2.3` | Strict production pin for regulated repositories. |
+| `@1.2.3` | Strict production pin for regulated repositories. |
 | `@<sha>` | Maximum reproducibility. |
 | `@main` | Adoption testing only. |
 

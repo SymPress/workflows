@@ -18,8 +18,9 @@ for the upstream rules.
 Recommended first tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag 1.0.0
+git tag v1 1.0.0
+git push origin 1.0.0 v1
 ```
 
 Production callers should use a tag or commit SHA instead of `@main`.

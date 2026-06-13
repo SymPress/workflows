@@ -21,7 +21,7 @@ body:
     attributes:
       label: SymPress Workflows ref
       description: Which tag or commit SHA is the caller using?
-      placeholder: v1, v1.2.3, or a commit SHA
+      placeholder: v1, 1.2.3, or a commit SHA
     validations:
       required: true
   - type: textarea

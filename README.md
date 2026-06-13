@@ -62,12 +62,13 @@ repositories.
 1. Push this repository to GitHub as `sympress/workflows`.
 2. If the repository is private or internal, allow access under
    `Settings -> Actions -> General -> Access`.
-3. Create a release tag, for example `v1.0.0`.
+3. Create a release tag, for example `1.0.0`, and a major alias such as `v1`.
 4. Add a caller workflow in a consumer repository.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag 1.0.0
+git tag v1 1.0.0
+git push origin 1.0.0 v1
 ```
 
 See [Installation](docs/installation.md) for the full repository and access

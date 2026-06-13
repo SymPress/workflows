@@ -6,7 +6,8 @@ tags, clear migration notes, and a fast path for urgent fixes.
 ## Versioning
 
 - `main` is the integration branch.
-- Release tags follow SemVer, for example `v1.4.0`.
+- Release tags follow SemVer without a `v` prefix, for example `1.4.0`.
+- Major aliases keep the `v` prefix, for example `v1`.
 - Patch releases fix workflow bugs without changing defaults.
 - Minor releases add workflows, inputs, docs, or safer opt-in behavior.
 - Major releases may change defaults or remove deprecated inputs.
