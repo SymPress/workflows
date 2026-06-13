@@ -1,0 +1,20 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    uses: sympress/reusable-workflows/.github/workflows/deploy-deployer.yml@v1
+    with:
+      environment: production
+      deployment_directory: deployment
+    secrets:
+      GITHUB_USER_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}

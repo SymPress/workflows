@@ -27,6 +27,16 @@ on:
         type: string
         default: ./vendor/bin/dep deploy
         required: false
+      allow_custom_deploy_command:
+        description: Allow deploy_command values other than the default.
+        type: boolean
+        default: false
+        required: false
+      allow_ssh_keyscan:
+        description: Allow ssh-keyscan fallback when SSH_KNOWN_HOSTS is not provided.
+        type: boolean
+        default: false
+        required: false
       php_version:
         description: PHP version used for Composer and Deployer.
         type: string
@@ -75,6 +85,9 @@ on:
       DEPLOY_PORT:
         description: SSH port for known_hosts.
         required: false
+      SSH_KNOWN_HOSTS:
+        description: Trusted known_hosts contents for deployment targets.
+        required: false
       DEPLOY_USER:
         description: Deployer user exposed as DEPLOY_USER.
         required: false
@@ -93,6 +106,10 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ github.repository }}-${{ inputs.environment }}
+      cancel-in-progress: false
     env:
       COMPOSER_NO_DEV: 1
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
@@ -112,8 +129,10 @@ jobs:
           WIREGUARD_CONFIGURATION: ${{ secrets.WIREGUARD_CONFIGURATION }}
         if: ${{ env.WIREGUARD_CONFIGURATION != '' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wireguard-tools
+          if ! command -v wg-quick >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y wireguard-tools
+          fi
           printf '%s\n' "$WIREGUARD_CONFIGURATION" | sudo tee /etc/wireguard/wg0.conf >/dev/null
           sudo chmod 600 /etc/wireguard/wg0.conf
           sudo wg-quick up wg0
@@ -146,12 +165,54 @@ jobs:
         run: |
           test -f "$WD/package.json" && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Node
+      - name: Detect package manager
+        id: package-manager
         if: ${{ steps.node.outputs.enabled == 'true' }}
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          path_for() {
+            if [ "$WD" = "." ]; then
+              printf '%s' "$1"
+            else
+              printf '%s/%s' "${WD%/}" "$1"
+            fi
+          }
+
+          if [ -f "$(path_for pnpm-lock.yaml)" ]; then
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for pnpm-lock.yaml)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for yarn.lock)" ]; then
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for yarn.lock)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for package-lock.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for package-lock.json)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for npm-shrinkwrap.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for npm-shrinkwrap.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "lockfile=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        if: ${{ steps.node.outputs.enabled == 'true' && steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Set up Node with cache
+        if: ${{ steps.node.outputs.enabled == 'true' && steps.package-manager.outputs.cache != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+          cache: ${{ steps.package-manager.outputs.cache }}
+          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
       - name: Build Node assets
         if: ${{ steps.node.outputs.enabled == 'true' }}
@@ -191,13 +252,29 @@ jobs:
           working-directory: ${{ inputs.deployment_directory }}
           composer-options: --prefer-dist --no-progress --no-interaction
 
-      - name: Add deploy host to known_hosts
+      - name: Configure SSH known hosts
         env:
           DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-        if: ${{ env.DEPLOY_HOSTNAME != '' }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          ALLOW_SSH_KEYSCAN: ${{ inputs.allow_ssh_keyscan }}
+        if: ${{ env.DEPLOY_HOSTNAME != '' || env.SSH_KNOWN_HOSTS != '' }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
+          touch ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+            exit 0
+          fi
+
+          if [ "$ALLOW_SSH_KEYSCAN" != "true" ]; then
+            echo "::error::SSH_KNOWN_HOSTS is required unless allow_ssh_keyscan=true is explicitly set."
+            exit 1
+          fi
+
           port="${DEPLOY_PORT:-22}"
           ssh-keyscan -p "$port" "$DEPLOY_HOSTNAME" >> ~/.ssh/known_hosts
 
@@ -211,8 +288,24 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
           DEPLOY_VERBOSITY: ${{ inputs.verbosity }}
           DEPLOY_COMMAND: ${{ inputs.deploy_command }}
+          ALLOW_CUSTOM_DEPLOY_COMMAND: ${{ inputs.allow_custom_deploy_command }}
         run: |
           set -euo pipefail
+          if [ "$DEPLOY_COMMAND" != "./vendor/bin/dep deploy" ] && [ "$ALLOW_CUSTOM_DEPLOY_COMMAND" != "true" ]; then
+            echo "::error::deploy_command is restricted by default. Set allow_custom_deploy_command=true only for trusted workflow calls."
+            exit 1
+          fi
+
+          if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+            echo "::error::environment may only contain letters, numbers, dots, underscores, colons, and hyphens."
+            exit 1
+          fi
+
+          if [[ ! "$DEPLOY_VERBOSITY" =~ ^v{0,3}$ ]]; then
+            echo "::error::verbosity must be empty, v, vv, or vvv."
+            exit 1
+          fi
+
           bash -lc "$DEPLOY_COMMAND $DEPLOY_ENVIRONMENT -$DEPLOY_VERBOSITY"
 
       - name: Stop WireGuard
@@ -221,4 +314,3 @@ jobs:
           if [ -f /etc/wireguard/wg0.conf ]; then
             sudo wg-quick down wg0 || true
           fi
-
