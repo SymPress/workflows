@@ -111,7 +111,7 @@ jobs:
       artifact: ${{ steps.artifact.outputs.name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Validate custom commands
         shell: bash
@@ -145,7 +145,7 @@ jobs:
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
         if: ${{ env.ENV_VARS_JSON != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const raw = process.env.ENV_VARS_JSON || '';
@@ -175,7 +175,7 @@ jobs:
           chmod 600 .ddev/homeadditions/.ssh/id_rsa .ddev/homeadditions/.ssh/config
 
       - name: Set up DDEV
-        uses: ddev/github-action-setup-ddev@v1
+        uses: ddev/github-action-setup-ddev@fdf2f5c97943bae638f31df6df86f1defa6210c0 # v1
         with:
           autostart: false
 
@@ -209,7 +209,7 @@ jobs:
         env:
           DDEV_ENV_VARS_JSON: ${{ secrets.DDEV_ENV_VARS }}
         if: ${{ env.DDEV_ENV_VARS_JSON != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const raw = process.env.DDEV_ENV_VARS_JSON || '';
@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ inputs.playwright_artifact_name }}
           path: ${{ inputs.playwright_artifact_path }}

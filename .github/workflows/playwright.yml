@@ -133,13 +133,13 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Configure SSH
         env:
           SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
         if: ${{ env.SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ env.SSH_KEY }}
 
@@ -154,7 +154,7 @@ jobs:
 
       - name: Set up PHP
         if: ${{ inputs.composer_deps_install }}
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -163,7 +163,7 @@ jobs:
 
       - name: Install Composer dependencies
         if: ${{ inputs.composer_deps_install }}
-        uses: ramsey/composer-install@v3
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
         env:
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
         with:
@@ -204,7 +204,7 @@ jobs:
 
       - name: Set up Node
         if: ${{ steps.package-manager.outputs.cache == '' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         with:
@@ -213,7 +213,7 @@ jobs:
 
       - name: Set up Node with cache
         if: ${{ steps.package-manager.outputs.cache != '' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         with:
@@ -388,7 +388,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ inputs.playwright_artifact_name }}
           path: ${{ inputs.playwright_artifact_path }}
