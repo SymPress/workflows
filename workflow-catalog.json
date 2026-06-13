@@ -155,6 +155,14 @@
       "summary": "Create a WordPress plugin or theme artifact with secret-file guards."
     },
     {
+      "id": "wordpress-archive-check",
+      "file": ".github/workflows/wordpress-archive-check.yml",
+      "category": "distribution",
+      "permissions": "actions read",
+      "trust": "pinned plugin-check ref",
+      "summary": "Download and validate WordPress artifacts with hygiene, syntax, and plugin review checks."
+    },
+    {
       "id": "wp-scripts-lint",
       "file": ".github/workflows/wp-scripts-lint.yml",
       "category": "quality",

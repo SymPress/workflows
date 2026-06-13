@@ -23,6 +23,7 @@ should run and which inputs differ.
 - Build-and-distribute workflow for compiled build branches and downloadable
   artifacts.
 - WordPress plugin/theme archive creation with `.distignore` support.
+- Artifact-level WordPress archive checks before release or QIT.
 - Semantic release with a built-in fallback release config.
 - Deployer-based deployments.
 - Playwright and DDEV Playwright workflows, including optional ngrok support.
@@ -102,6 +103,7 @@ Reusable workflows are called at job level with `jobs.<job_id>.uses`. See
 - [Build and distribute](docs/build-and-distribute.md) for compiled build
   branches and artifacts.
 - [Archive creation](docs/archive.md) for WordPress plugin/theme archives.
+- [Archive check](docs/archive-check.md) for shipped artifact validation.
 - [Release](docs/release.md) for semantic-release automation.
 - [Playwright](docs/playwright.md) and [DDEV Playwright](docs/ddev-playwright.md)
   for browser tests.

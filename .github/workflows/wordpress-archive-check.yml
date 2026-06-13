@@ -1,0 +1,278 @@
+name: WordPress archive check
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: Artifact name to download and inspect.
+        type: string
+        required: true
+      package_folder:
+        description: Optional package folder inside the downloaded artifact.
+        type: string
+        default: ''
+        required: false
+      php_version:
+        description: PHP version used for archive checks.
+        type: string
+        default: '8.5'
+        required: false
+      plugin_check_ref:
+        description: Pinned WordPress/plugin-check ref.
+        type: string
+        default: 28f3d9fe6b73cc0c0cedc471db86e73d3607d511
+        required: false
+      plugin_check_composer_options:
+        description: Composer options used to install WordPress/plugin-check.
+        type: string
+        default: --no-dev --prefer-dist --no-progress --no-interaction
+        required: false
+      plugin_review_standard:
+        description: PHPCS standard path inside WordPress/plugin-check.
+        type: string
+        default: phpcs-rulesets/plugin-review.xml
+        required: false
+      excluded_sniffs:
+        description: Space or comma separated PHPCS sniffs excluded from plugin review.
+        type: string
+        default: ''
+        required: false
+      parallel_lint_excludes:
+        description: Space-separated directories excluded from parallel-lint.
+        type: string
+        default: vendor node_modules
+        required: false
+      artifact_allowed_env_files:
+        description: Whitespace-separated .env files allowed in the archive.
+        type: string
+        default: .env.example .env.dist
+        required: false
+      run_plugin_review:
+        description: Run WordPress Plugin Check PHPCS rules when a plugin is detected.
+        type: boolean
+        default: true
+        required: false
+      annotate:
+        description: Convert PHPCS checkstyle output to pull request annotations.
+        type: boolean
+        default: true
+        required: false
+      timeout_minutes:
+        description: Job timeout.
+        type: number
+        default: 15
+        required: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Composer authentication JSON.
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: read
+
+jobs:
+  wordpress-archive-check:
+    name: WordPress archive check
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/archive
+
+      - name: Resolve package path
+        id: package
+        shell: bash
+        env:
+          PACKAGE_FOLDER: ${{ inputs.package_folder }}
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/archive"
+
+          if [ -n "$PACKAGE_FOLDER" ]; then
+            package_path="$root/${PACKAGE_FOLDER#/}"
+          else
+            mapfile -t dirs < <(find "$root" -mindepth 1 -maxdepth 1 -type d | sort)
+            mapfile -t files < <(find "$root" -mindepth 1 -maxdepth 1 -type f | sort)
+            if [ "${#dirs[@]}" -eq 1 ] && [ "${#files[@]}" -eq 0 ]; then
+              package_path="${dirs[0]}"
+            else
+              package_path="$root"
+            fi
+          fi
+
+          if [ ! -d "$package_path" ]; then
+            echo "::error::Package folder was not found: $package_path"
+            exit 1
+          fi
+
+          plugin_file=""
+          while IFS= read -r -d '' file; do
+            if grep -Eq '^([[:space:]]*\*[[:space:]]*)?Plugin Name:' "$file"; then
+              plugin_file="${file#"$package_path"/}"
+              break
+            fi
+          done < <(find "$package_path" -maxdepth 2 -type f -name '*.php' -print0)
+
+          {
+            echo "path=$package_path"
+            echo "is_plugin=$([ -n "$plugin_file" ] && echo true || echo false)"
+            echo "plugin_file=$plugin_file"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check archive hygiene
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          ARTIFACT_ALLOWED_ENV_FILES: ${{ inputs.artifact_allowed_env_files }}
+        run: |
+          set -euo pipefail
+          allowed_env_files=()
+          while IFS= read -r line; do
+            for env_file in $line; do
+              env_file="${env_file#./}"
+              [ -n "$env_file" ] && allowed_env_files+=("$env_file")
+            done
+          done <<< "$ARTIFACT_ALLOWED_ENV_FILES"
+
+          is_allowed_env_file() {
+            local file="$1"
+            local allowed
+            for allowed in "${allowed_env_files[@]}"; do
+              if [ "$file" = "$allowed" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          leaks=()
+          while IFS= read -r -d '' file; do
+            rel="${file#"$PACKAGE_PATH"/}"
+            base="${rel##*/}"
+            case "$base" in
+              .env*)
+                if ! is_allowed_env_file "$rel"; then
+                  leaks+=("$rel")
+                fi
+                ;;
+              .npmrc|auth.json|composer-auth.json|id_rsa|id_ed25519|known_hosts|*.pem|*.key|*.p12|*.pfx|*.kubeconfig|secrets.*)
+                leaks+=("$rel")
+                ;;
+            esac
+
+            if [[ "$rel" == .ssh/* || "$rel" == */.ssh/* ]]; then
+              leaks+=("$rel")
+            fi
+          done < <(find "$PACKAGE_PATH" -type f -print0)
+
+          if [ "${#leaks[@]}" -gt 0 ]; then
+            echo "::error::Archive contains blocked secret-like files."
+            printf 'Blocked archive path: %s\n' "${leaks[@]}"
+            exit 1
+          fi
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          tools: composer:v2, parallel-lint, cs2pr
+          coverage: none
+
+      - name: Run PHP syntax check
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          PARALLEL_LINT_EXCLUDES: ${{ inputs.parallel_lint_excludes }}
+        run: |
+          set -euo pipefail
+          args=()
+          for excluded in $PARALLEL_LINT_EXCLUDES; do
+            args+=(--exclude "$excluded")
+          done
+
+          parallel-lint "${args[@]}" "$PACKAGE_PATH"
+
+      - name: Checkout WordPress Plugin Check
+        if: ${{ inputs.run_plugin_review && steps.package.outputs.is_plugin == 'true' }}
+        id: plugin-check
+        shell: bash
+        env:
+          PLUGIN_CHECK_REF: ${{ inputs.plugin_check_ref }}
+        run: |
+          set -euo pipefail
+          plugin_check_dir="${RUNNER_TEMP}/plugin-check"
+          git init "$plugin_check_dir"
+          git -C "$plugin_check_dir" remote add origin https://github.com/WordPress/plugin-check.git
+          git -C "$plugin_check_dir" fetch --depth=1 origin "$PLUGIN_CHECK_REF"
+          git -C "$plugin_check_dir" checkout --detach FETCH_HEAD
+          echo "dir=$plugin_check_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Install WordPress Plugin Check dependencies
+        if: ${{ inputs.run_plugin_review && steps.package.outputs.is_plugin == 'true' }}
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+        with:
+          working-directory: ${{ steps.plugin-check.outputs.dir }}
+          composer-options: ${{ inputs.plugin_check_composer_options }}
+
+      - name: Run WordPress Plugin Check PHPCS
+        if: ${{ inputs.run_plugin_review && steps.package.outputs.is_plugin == 'true' }}
+        shell: bash
+        env:
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          PLUGIN_CHECK_DIR: ${{ steps.plugin-check.outputs.dir }}
+          PLUGIN_REVIEW_STANDARD: ${{ inputs.plugin_review_standard }}
+          EXCLUDED_SNIFFS: ${{ inputs.excluded_sniffs }}
+          ANNOTATE: ${{ inputs.annotate }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          phpcs_bin="$PLUGIN_CHECK_DIR/vendor/bin/phpcs"
+          standard="$PLUGIN_CHECK_DIR/${PLUGIN_REVIEW_STANDARD#/}"
+          report_file="${RUNNER_TEMP}/plugin-review-checkstyle.xml"
+
+          if [ ! -x "$phpcs_bin" ]; then
+            echo "::error::PHPCS binary was not installed by WordPress Plugin Check."
+            exit 1
+          fi
+
+          if [ ! -f "$standard" ]; then
+            echo "::error::Plugin review standard was not found: $standard"
+            exit 1
+          fi
+
+          args=(
+            "--standard=$standard"
+            "--extensions=php"
+            "--report=full"
+          )
+
+          excluded="$(printf '%s' "$EXCLUDED_SNIFFS" | tr '[:space:]' ',' | sed -e 's/,,*/,/g' -e 's/^,//' -e 's/,$//')"
+          if [ -n "$excluded" ]; then
+            args+=("--exclude=$excluded")
+          fi
+
+          case "$EVENT_NAME" in
+            pull_request|pull_request_target)
+              if [ "$ANNOTATE" = "true" ]; then
+                args+=("--report-checkstyle=$report_file")
+              fi
+              ;;
+          esac
+
+          "$phpcs_bin" "${args[@]}" "$PACKAGE_PATH"
+
+      - name: Annotate plugin review report
+        if: ${{ always() && inputs.annotate && inputs.run_plugin_review && steps.package.outputs.is_plugin == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
+        run: |
+          report_file="${RUNNER_TEMP}/plugin-review-checkstyle.xml"
+          if [ -f "$report_file" ]; then
+            cs2pr --graceful-warnings "$report_file"
+          fi

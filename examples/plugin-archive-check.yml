@@ -1,0 +1,21 @@
+name: Archive Check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: read
+
+jobs:
+  archive:
+    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive.yml@v1
+
+  archive-check:
+    needs: archive
+    uses: sympress/reusable-workflows/.github/workflows/wordpress-archive-check.yml@v1
+    with:
+      artifact_name: ${{ needs.archive.outputs.artifact }}

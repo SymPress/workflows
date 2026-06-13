@@ -28,6 +28,7 @@ Private Composer or npm dependencies may require `COMPOSER_AUTH_JSON` or
 | --- | --- | --- | --- |
 | `assets-build.yml` | Build assets and optionally upload output | `contents: read` | None |
 | `wordpress-archive.yml` | WordPress plugin or theme artifacts | `contents: read` | `artifact` |
+| `wordpress-archive-check.yml` | Validate downloaded WordPress artifacts | `contents: read`, `actions: read`, `checks: write` | None |
 | `build-and-distribute.yml` | Build branch plus artifact | `contents: write` | `artifact`, `built_branch`, `package_version` |
 
 Prefer `wordpress-archive.yml` unless the project truly needs a build branch.

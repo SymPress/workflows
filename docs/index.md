@@ -33,6 +33,7 @@ Start here when adopting or maintaining the workflow set.
 - [Text Quality](text-quality.md)
 - [Asset Builds](assets.md)
 - [WordPress Archive](archive.md)
+- [WordPress Archive Check](archive-check.md)
 - [Build And Distribute](build-and-distribute.md)
 - [Playwright](playwright.md)
 - [DDEV Playwright](ddev-playwright.md)

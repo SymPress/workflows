@@ -20,6 +20,7 @@ The workflow set covers the full automation surface SymPress projects currently 
 
 - `assets-build.yml`: Composer asset compiler and Node build scripts.
 - `wordpress-archive.yml`: Plugin/theme artifact staging with `.distignore`.
+- `wordpress-archive-check.yml`: Artifact hygiene, PHP syntax, and Plugin Check PHPCS review.
 - `build-and-distribute.yml`: Build branch publication, artifact upload, version/header updates.
 - `automatic-release.yml`: semantic-release with a SymPress fallback config.
 
