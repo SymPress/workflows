@@ -33,6 +33,11 @@ on:
         type: string
         default: npx playwright test
         required: false
+      allow_custom_commands:
+        description: Allow custom DDEV, setup, Playwright, and ngrok commands.
+        type: boolean
+        default: false
+        required: false
       playwright_artifact_name:
         description: Artifact name.
         type: string
@@ -46,6 +51,11 @@ on:
           test-results/
           tests/Playwright/playwright-report/
           tests/Playwright/test-results/
+        required: false
+      playwright_artifact_include_hidden_files:
+        description: Include hidden files in Playwright artifact uploads.
+        type: boolean
+        default: false
         required: false
       ngrok_start_command:
         description: Optional command that starts an ngrok tunnel.
@@ -102,6 +112,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate custom commands
+        shell: bash
+        env:
+          ALLOW_CUSTOM_COMMANDS: ${{ inputs.allow_custom_commands }}
+          DDEV_START_COMMAND: ${{ inputs.ddev_start_command }}
+          SETUP_COMMAND: ${{ inputs.setup_command }}
+          PLAYWRIGHT_INSTALL_COMMAND: ${{ inputs.playwright_install_command }}
+          PLAYWRIGHT_RUN_COMMAND: ${{ inputs.playwright_run_command }}
+          NGROK_START_COMMAND: ${{ inputs.ngrok_start_command }}
+        run: |
+          set -euo pipefail
+          if [ "$ALLOW_CUSTOM_COMMANDS" = "true" ]; then
+            exit 0
+          fi
+
+          blocked=()
+          [ "$DDEV_START_COMMAND" = "ddev start" ] || blocked+=("ddev_start_command")
+          [ -z "$SETUP_COMMAND" ] || blocked+=("setup_command")
+          [ "$PLAYWRIGHT_INSTALL_COMMAND" = "ddev exec npm install && npx playwright install --with-deps" ] || blocked+=("playwright_install_command")
+          [ "$PLAYWRIGHT_RUN_COMMAND" = "npx playwright test" ] || blocked+=("playwright_run_command")
+          [ -z "$NGROK_START_COMMAND" ] || blocked+=("ngrok_start_command")
+
+          if [ "${#blocked[@]}" -gt 0 ]; then
+            echo "::error::Custom command inputs are disabled by default. Set allow_custom_commands=true only for trusted workflow calls."
+            printf 'Blocked input: %s\n' "${blocked[@]}"
+            exit 1
+          fi
 
       - name: Export host environment
         env:
@@ -186,33 +224,54 @@ jobs:
             }
 
       - name: Start DDEV
-        run: ${{ inputs.ddev_start_command }}
+        shell: bash
+        env:
+          DDEV_START_COMMAND: ${{ inputs.ddev_start_command }}
+        run: |
+          set -euo pipefail
+          bash -lc "$DDEV_START_COMMAND"
 
       - name: Run setup command
         if: ${{ inputs.setup_command != '' }}
-        run: ${{ inputs.setup_command }}
+        shell: bash
+        env:
+          SETUP_COMMAND: ${{ inputs.setup_command }}
+        run: |
+          set -euo pipefail
+          bash -lc "$SETUP_COMMAND"
 
       - name: Install ngrok
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         if: ${{ env.NGROK_AUTH_TOKEN != '' }}
         run: |
-          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
-            | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt-get update
-          sudo apt-get install -y ngrok
+          if ! command -v ngrok >/dev/null 2>&1; then
+            curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+            echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+              | sudo tee /etc/apt/sources.list.d/ngrok.list
+            sudo apt-get update
+            sudo apt-get install -y ngrok
+          fi
           ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
       - name: Install Playwright
-        run: ${{ inputs.playwright_install_command }}
+        shell: bash
+        env:
+          PLAYWRIGHT_INSTALL_COMMAND: ${{ inputs.playwright_install_command }}
+        run: |
+          set -euo pipefail
+          bash -lc "$PLAYWRIGHT_INSTALL_COMMAND"
 
       - name: Start ngrok command
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          NGROK_START_COMMAND: ${{ inputs.ngrok_start_command }}
         if: ${{ env.NGROK_AUTH_TOKEN != '' && inputs.ngrok_start_command != '' }}
-        run: ${{ inputs.ngrok_start_command }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -lc "$NGROK_START_COMMAND"
 
       - name: Export ngrok URL
         shell: bash
@@ -230,7 +289,12 @@ jobs:
       - name: Run Playwright
         id: run-playwright
         continue-on-error: true
-        run: ${{ inputs.playwright_run_command }}
+        shell: bash
+        env:
+          PLAYWRIGHT_RUN_COMMAND: ${{ inputs.playwright_run_command }}
+        run: |
+          set -euo pipefail
+          bash -lc "$PLAYWRIGHT_RUN_COMMAND"
 
       - name: Set artifact name
         id: artifact
@@ -243,7 +307,7 @@ jobs:
           name: ${{ inputs.playwright_artifact_name }}
           path: ${{ inputs.playwright_artifact_path }}
           if-no-files-found: ignore
-          include-hidden-files: true
+          include-hidden-files: ${{ inputs.playwright_artifact_include_hidden_files }}
 
       - name: Stop DDEV
         if: ${{ always() }}

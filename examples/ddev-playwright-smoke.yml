@@ -1,0 +1,17 @@
+name: DDEV Playwright Smoke
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    uses: sympress/reusable-workflows/.github/workflows/ddev-playwright.yml@v1
+    with:
+      php_version: '8.5'
+      node_version: '24'
+    secrets:
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+      NPM_REGISTRY_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}

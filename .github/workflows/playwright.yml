@@ -75,6 +75,11 @@ on:
         type: string
         default: ''
         required: false
+      allow_inline_scripts:
+        description: Allow pre_script execution. Keep disabled for untrusted callers.
+        type: boolean
+        default: false
+        required: false
       testrail_plan_id:
         description: Optional TestRail plan ID appended to .env.ci.
         type: string
@@ -165,13 +170,57 @@ jobs:
           working-directory: ${{ inputs.working_directory }}
           composer-options: --prefer-dist --no-progress --no-interaction
 
+      - name: Detect package manager
+        id: package-manager
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          path_for() {
+            if [ "$WD" = "." ]; then
+              printf '%s' "$1"
+            else
+              printf '%s/%s' "${WD%/}" "$1"
+            fi
+          }
+
+          if [ -f "$(path_for pnpm-lock.yaml)" ]; then
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for pnpm-lock.yaml)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for yarn.lock)" ]; then
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for yarn.lock)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for package-lock.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for package-lock.json)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for npm-shrinkwrap.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for npm-shrinkwrap.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "lockfile=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node
+        if: ${{ steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Set up Node with cache
+        if: ${{ steps.package-manager.outputs.cache != '' }}
+        uses: actions/setup-node@v4
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+          cache: ${{ steps.package-manager.outputs.cache }}
+          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
       - name: Install Node dependencies
         working-directory: ${{ inputs.working_directory }}
@@ -254,12 +303,14 @@ jobs:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         if: ${{ env.NGROK_AUTH_TOKEN != '' }}
         run: |
-          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
-            | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt-get update
-          sudo apt-get install -y ngrok
+          if ! command -v ngrok >/dev/null 2>&1; then
+            curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+            echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+              | sudo tee /etc/apt/sources.list.d/ngrok.list
+            sudo apt-get update
+            sudo apt-get install -y ngrok
+          fi
 
       - name: Start ngrok
         working-directory: ${{ inputs.working_directory }}
@@ -295,12 +346,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+          ALLOW_INLINE_SCRIPTS: ${{ inputs.allow_inline_scripts }}
+          PRE_SCRIPT: ${{ inputs.pre_script }}
         run: |
           set -euo pipefail
+          if [ "$ALLOW_INLINE_SCRIPTS" != "true" ]; then
+            echo "::error::pre_script is disabled by default. Set allow_inline_scripts=true only for trusted workflow calls."
+            exit 1
+          fi
+
           set -a
           source .env.ci || true
           set +a
-          ${{ inputs.pre_script }}
+          bash -euo pipefail -c "$PRE_SCRIPT"
 
       - name: Run Playwright
         id: run-playwright

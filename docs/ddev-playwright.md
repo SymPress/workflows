@@ -5,13 +5,10 @@ Use `ddev-playwright.yml` for SymPress Starter projects or other DDEV-backed Wor
 ```yml
 jobs:
   e2e:
-    uses: sympress/reusable-workflows/.github/workflows/ddev-playwright.yml@main
+    uses: sympress/reusable-workflows/.github/workflows/ddev-playwright.yml@v1
     with:
       php_version: '8.5'
       node_version: '24'
-      setup_command: bin/console setup sympress-ci
-      playwright_install_command: ddev exec npm install && npx playwright install --with-deps
-      playwright_run_command: npx playwright test
 ```
 
 The workflow supports:
@@ -23,3 +20,7 @@ The workflow supports:
 - optional ngrok setup through a caller-provided command;
 - artifact upload and DDEV shutdown on failure.
 
+Custom DDEV, setup, Playwright, and ngrok commands are disabled by default.
+Set `allow_custom_commands: true` only for trusted workflow calls. Hidden files
+are excluded from Playwright artifacts unless
+`playwright_artifact_include_hidden_files: true` is set.
