@@ -1,10 +1,12 @@
 {
   "private": true,
-  "name": "@sympress/reusable-workflows",
-  "description": "Reusable GitHub Actions workflows for SymPress projects.",
+  "name": "@sympress/workflows",
+  "description": "GitHub Actions workflows for SymPress projects.",
   "license": "MIT",
   "scripts": {
-    "lint:docs": "markdownlint-cli2 README.md docs/**/*.md",
+    "doctor": "node scripts/doctor.mjs",
+    "doctor:repo": "node scripts/doctor.mjs --fail-on high .",
+    "lint:docs": "markdownlint-cli2 README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md SUPPORT.md docs/**/*.md .github/**/*.md",
     "lint:workflows": "actionlint",
     "test:contracts": "node scripts/validate-contracts.mjs"
   },
