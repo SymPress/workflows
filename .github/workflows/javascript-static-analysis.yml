@@ -28,6 +28,11 @@ on:
         type: string
         default: ''
         required: false
+      allow_custom_command:
+        description: Allow command execution. Keep disabled for untrusted callers.
+        type: boolean
+        default: false
+        required: false
       script:
         description: Preferred package script for static analysis.
         type: string
@@ -105,11 +110,53 @@ jobs:
           git config --global user.email "$GIT_EMAIL"
           git config --global user.name "$GIT_NAME"
 
+      - name: Detect package manager
+        id: package-manager
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          path_for() {
+            if [ "$WD" = "." ]; then
+              printf '%s' "$1"
+            else
+              printf '%s/%s' "${WD%/}" "$1"
+            fi
+          }
+
+          if [ -f "$(path_for pnpm-lock.yaml)" ]; then
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for pnpm-lock.yaml)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for yarn.lock)" ]; then
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for yarn.lock)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for package-lock.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for package-lock.json)" >> "$GITHUB_OUTPUT"
+          elif [ -f "$(path_for npm-shrinkwrap.json)" ]; then
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            echo "lockfile=$(path_for npm-shrinkwrap.json)" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "lockfile=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node
+        if: ${{ steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
+
+      - name: Set up Node with cache
+        if: ${{ steps.package-manager.outputs.cache != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: ${{ inputs.npm_registry_domain }}
+          cache: ${{ steps.package-manager.outputs.cache }}
+          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
       - name: Install dependencies
         working-directory: ${{ inputs.working_directory }}
@@ -133,11 +180,16 @@ jobs:
         shell: bash
         env:
           COMMAND: ${{ inputs.command }}
+          ALLOW_CUSTOM_COMMAND: ${{ inputs.allow_custom_command }}
           SCRIPT: ${{ inputs.script }}
         run: |
           set -euo pipefail
 
           if [ -n "$COMMAND" ]; then
+            if [ "$ALLOW_CUSTOM_COMMAND" != "true" ]; then
+              echo "::error::command is disabled by default. Set allow_custom_command=true only for trusted workflow calls."
+              exit 1
+            fi
             bash -lc "$COMMAND"
             exit 0
           fi
@@ -159,4 +211,3 @@ jobs:
           fi
 
           echo "No static analysis script or TypeScript binary found."
-

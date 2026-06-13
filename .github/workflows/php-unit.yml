@@ -33,6 +33,11 @@ on:
         type: string
         default: ''
         required: false
+      allow_custom_command:
+        description: Allow command execution. Keep disabled for untrusted callers.
+        type: boolean
+        default: false
+        required: false
       phpunit_args:
         description: Arguments passed to PHPUnit when no Composer script is found.
         type: string
@@ -110,11 +115,16 @@ jobs:
         shell: bash
         env:
           COMMAND: ${{ inputs.command }}
+          ALLOW_CUSTOM_COMMAND: ${{ inputs.allow_custom_command }}
           PHPUNIT_ARGS: ${{ inputs.phpunit_args }}
         run: |
           set -euo pipefail
 
           if [ -n "$COMMAND" ]; then
+            if [ "$ALLOW_CUSTOM_COMMAND" != "true" ]; then
+              echo "::error::command is disabled by default. Set allow_custom_command=true only for trusted workflow calls."
+              exit 1
+            fi
             bash -lc "$COMMAND"
             exit 0
           fi
