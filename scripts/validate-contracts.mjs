@@ -179,7 +179,7 @@ for (const file of ['.github/workflows/build-and-distribute.yml', '.github/workf
     'Artifact content matched a blocked secret pattern',
     'artifact-sha256sums.txt',
     'artifact-manifest.json',
-    'actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32',
+    'actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373',
     'actions: read',
     'attestations: write',
     'id-token: write',
@@ -234,7 +234,7 @@ assert(qit.includes('QIT_TEST'), 'woo-qit.yml must pass qit_test through env');
 assert(qit.includes('args=("run:${QIT_TEST}"'), 'woo-qit.yml must run QIT with an argv array');
 
 const repositoryChecks = read('.github/workflows/_repository-checks.yml');
-assert(repositoryChecks.includes('zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d'), '_repository-checks.yml must pin zizmor');
+assert(repositoryChecks.includes('zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa'), '_repository-checks.yml must pin zizmor');
 assert(repositoryChecks.includes('npm run test:contracts'), '_repository-checks.yml must run contract tests');
 assert(repositoryChecks.includes('npm run doctor -- --fail-on high fixtures/wp-plugin'), '_repository-checks.yml must run the doctor fixture gate');
 assert(repositoryChecks.includes('npm run doctor:repo'), '_repository-checks.yml must run the repository doctor gate');
@@ -306,7 +306,7 @@ for (const file of [
 }
 
 const playwright = read('.github/workflows/playwright.yml');
-assert(playwright.includes('actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae'), 'playwright.yml must pin the Playwright browser cache action');
+assert(playwright.includes('actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'), 'playwright.yml must pin the Playwright browser cache action');
 assert(!playwright.includes('source .env.ci'), 'playwright.yml must parse .env.ci without sourcing it');
 
 const textQuality = read('.github/workflows/text-quality.yml');

@@ -78,7 +78,7 @@ jobs:
 
       - name: Run typos
         if: ${{ inputs.run_typos }}
-        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1
+        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
         with:
           files: ${{ inputs.typos_files }}
           config: ${{ inputs.typos_config }}
