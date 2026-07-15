@@ -1,0 +1,1985 @@
+{
+  "repository": "sympress/workflows",
+  "workflows": [
+    {
+      "id": "assets-build",
+      "file": ".github/workflows/assets-build.yml",
+      "inputs": {
+        "working_directory": {
+          "description": "Directory that contains composer.json and/or package.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for Composer asset builds.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used for npm/yarn/pnpm builds.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "node_options": {
+          "description": "NODE_OPTIONS value.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "composer_install": {
+          "description": "Install Composer dependencies before building.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "run_asset_compiler": {
+          "description": "Run Composer compile-assets if available.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "asset_compiler_args": {
+          "description": "Arguments passed to composer compile-assets.",
+          "type": "string",
+          "default": "-v --env=root",
+          "required": false
+        },
+        "run_node_build": {
+          "description": "Run the package build script if package.json exists.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "build_script": {
+          "description": "npm/yarn/pnpm script to run.",
+          "type": "string",
+          "default": "build",
+          "required": false
+        },
+        "artifact_name": {
+          "description": "Optional artifact name to upload after building.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "artifact_path": {
+          "description": "Optional artifact path to upload after building.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "artifact_include_hidden_files": {
+          "description": "Include hidden files in artifact uploads.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 15,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "automatic-release",
+      "file": ".github/workflows/automatic-release.yml",
+      "inputs": {
+        "node_version": {
+          "description": "Node version used for semantic-release.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "release_config": {
+          "description": "Release config path in the calling repository.",
+          "type": "string",
+          "default": "release.config.cjs",
+          "required": false
+        },
+        "workflow_repository": {
+          "description": "Repository containing fallback release templates.",
+          "type": "string",
+          "default": "sympress/workflows",
+          "required": false
+        },
+        "workflow_ref": {
+          "description": "Ref used when checking out fallback release templates.",
+          "type": "string",
+          "default": "v1",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git author email.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git author name.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "Optional SSH key for git operations.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_PUBLIC_KEY": {
+          "description": "Optional SSH public key for commit signing.",
+          "required": false
+        },
+        "GITHUB_USER_TOKEN": {
+          "description": "Token with release permissions. Falls back to GITHUB_TOKEN.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "build-and-distribute",
+      "file": ".github/workflows/build-and-distribute.yml",
+      "inputs": {
+        "working_directory": {
+          "description": "Directory that contains the package to build.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "package_name": {
+          "description": "Package and artifact name. Falls back to repository name.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "package_version": {
+          "description": "Package version. Auto-generated from latest tag, branch, and SHA when empty.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "built_branch_name": {
+          "description": "Target branch for compiled artifacts. Falls back to source branch without source_branch_prefix.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "source_branch_prefix": {
+          "description": "Prefix stripped from source branches when deriving the build branch.",
+          "type": "string",
+          "default": "dev/",
+          "required": false
+        },
+        "allow_same_branch": {
+          "description": "Allow committing build artifacts to the same branch that triggered the workflow.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "skip_existing_build": {
+          "description": "Skip expensive build steps when the build branch already contains the source SHA.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "allow_github_ssh_keyscan": {
+          "description": "Allow ssh-keyscan fallback for github.com when GITHUB_KNOWN_HOSTS is not provided.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for Composer.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "php_tools": {
+          "description": "Additional tools passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used for frontend builds.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "node_options": {
+          "description": "NODE_OPTIONS value.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--no-dev --prefer-dist --optimize-autoloader --no-progress --no-interaction",
+          "required": false
+        },
+        "build_script": {
+          "description": "npm/yarn/pnpm build script to run.",
+          "type": "string",
+          "default": "build",
+          "required": false
+        },
+        "run_asset_compiler": {
+          "description": "Run Composer compile-assets if available.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "asset_compiler_args": {
+          "description": "Arguments passed to composer compile-assets.",
+          "type": "string",
+          "default": "-v --env=root",
+          "required": false
+        },
+        "run_php_scoper": {
+          "description": "Run PHP-Scoper when scoper.inc.php exists.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "update_composer_version": {
+          "description": "Write package_version to composer.json when present.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "update_package_json_version": {
+          "description": "Write package_version to package.json when present.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "update_wordpress_headers": {
+          "description": "Write package_version and SHA to plugin/theme headers when detected.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "pre_script": {
+          "description": "Shell code executed before build steps.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_inline_scripts": {
+          "description": "Allow pre_script execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "artifact_allowed_env_files": {
+          "description": "Whitespace-separated .env files that may be shipped. Add .env only when it is intentionally non-secret.",
+          "type": "string",
+          "default": ".env.example .env.dist",
+          "required": false
+        },
+        "artifact_extra_excludes": {
+          "description": "Additional whitespace-separated rsync exclude patterns for the artifact.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "artifact_secret_scan": {
+          "description": "Scan staged artifact files for common secret patterns before upload.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "artifact_manifest": {
+          "description": "Add artifact-manifest.json and artifact-sha256sums.txt to the artifact.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "artifact_attestation": {
+          "description": "Attest artifact-manifest.json with GitHub Artifact Attestations. Requires caller permissions actions: read, attestations: write, and id-token: write.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 20,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git author email.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git author name.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "Optional SSH key used for checkout and push.",
+          "required": false
+        },
+        "GITHUB_KNOWN_HOSTS": {
+          "description": "Trusted known_hosts entry for github.com when pushing via SSH.",
+          "required": false
+        },
+        "GITHUB_USER_TOKEN": {
+          "description": "Optional token used for pushing the build branch.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {
+        "artifact": {
+          "description": "Uploaded artifact name.",
+          "value": "${{ jobs.build-and-distribute.outputs.artifact }}"
+        },
+        "built_branch": {
+          "description": "Branch that received the compiled build.",
+          "value": "${{ jobs.build-and-distribute.outputs.built_branch }}"
+        },
+        "package_version": {
+          "description": "Version used for the build.",
+          "value": "${{ jobs.build-and-distribute.outputs.package_version }}"
+        },
+        "skipped_existing_build": {
+          "description": "Whether an existing build branch with the same source SHA was reused.",
+          "value": "${{ jobs.build-and-distribute.outputs.skipped_existing_build }}"
+        }
+      }
+    },
+    {
+      "id": "codeql",
+      "file": ".github/workflows/codeql.yml",
+      "inputs": {
+        "languages": {
+          "description": "Comma-separated CodeQL language list.",
+          "type": "string",
+          "default": "php",
+          "required": false
+        },
+        "build_mode": {
+          "description": "CodeQL build mode.",
+          "type": "string",
+          "default": "none",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 15,
+          "required": false
+        }
+      },
+      "secrets": {},
+      "outputs": {}
+    },
+    {
+      "id": "composer-validate",
+      "file": ".github/workflows/composer-validate.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for Composer.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains composer.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "install": {
+          "description": "Install dependencies before validation and audit.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "audit": {
+          "description": "Run Composer audit.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "validate_options": {
+          "description": "Options passed to composer validate.",
+          "type": "string",
+          "default": "--strict --no-check-publish",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 5,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "ddev-playwright",
+      "file": ".github/workflows/ddev-playwright.yml",
+      "inputs": {
+        "php_version": {
+          "description": "Optional PHP version to set in DDEV before start.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Optional Node version to set in DDEV before start.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "ddev_start_command": {
+          "description": "Command used to start DDEV.",
+          "type": "string",
+          "default": "ddev start",
+          "required": false
+        },
+        "setup_command": {
+          "description": "Optional project setup command after DDEV starts.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "playwright_install_command": {
+          "description": "Command that installs Playwright dependencies.",
+          "type": "string",
+          "default": "ddev exec bash -lc \"if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo 'No JavaScript lockfile found.'; exit 1; fi\" && npx playwright install --with-deps",
+          "required": false
+        },
+        "playwright_run_command": {
+          "description": "Command that runs Playwright tests.",
+          "type": "string",
+          "default": "npx playwright test",
+          "required": false
+        },
+        "allow_custom_commands": {
+          "description": "Allow custom DDEV, setup, Playwright, and ngrok commands.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow the legacy npm install Playwright setup command without lockfiles.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "playwright_artifact_name": {
+          "description": "Artifact name.",
+          "type": "string",
+          "default": "ddev-playwright-report",
+          "required": false
+        },
+        "playwright_artifact_path": {
+          "description": "Repository-root artifact paths to upload.",
+          "type": "string",
+          "default": "playwright-report/\ntest-results/\ntests/Playwright/playwright-report/\ntests/Playwright/test-results/\n",
+          "required": false
+        },
+        "playwright_artifact_include_hidden_files": {
+          "description": "Include hidden files in Playwright artifact uploads.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "ngrok_start_command": {
+          "description": "Optional command that starts an ngrok tunnel.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "baseurl_env_name": {
+          "description": "Environment variable name updated with ngrok URL.",
+          "type": "string",
+          "default": "BASEURL",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 45,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON exposed to DDEV as auth.json.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token exposed through .npmrc.",
+          "required": false
+        },
+        "NGROK_AUTH_TOKEN": {
+          "description": "Optional ngrok token.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of host {name,value} variables to export.",
+          "required": false
+        },
+        "DDEV_ENV_VARS": {
+          "description": "JSON object or array of variables added to DDEV web environment.",
+          "required": false
+        },
+        "SSH_KEY": {
+          "description": "Optional SSH key mounted into DDEV home additions.",
+          "required": false
+        },
+        "SSH_KNOWN_HOSTS": {
+          "description": "Optional known_hosts contents mounted into DDEV.",
+          "required": false
+        }
+      },
+      "outputs": {
+        "artifact": {
+          "description": "Uploaded artifact name.",
+          "value": "${{ jobs.ddev-playwright.outputs.artifact }}"
+        }
+      }
+    },
+    {
+      "id": "deploy-deployer",
+      "file": ".github/workflows/deploy-deployer.yml",
+      "inputs": {
+        "environment": {
+          "description": "Deployer environment/stage.",
+          "type": "string",
+          "required": true
+        },
+        "verbosity": {
+          "description": "Deployer verbosity without leading dash.",
+          "type": "string",
+          "default": "v",
+          "required": false
+        },
+        "working_directory": {
+          "description": "Repository directory to install before deployment.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "deployment_directory": {
+          "description": "Directory containing Deployer composer.json and deploy config.",
+          "type": "string",
+          "default": "deployment",
+          "required": false
+        },
+        "deploy_command": {
+          "description": "Command executed inside deployment_directory.",
+          "type": "string",
+          "default": "./vendor/bin/dep deploy",
+          "required": false
+        },
+        "allow_custom_deploy_command": {
+          "description": "Allow deploy_command values other than the default.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "allow_ssh_keyscan": {
+          "description": "Allow ssh-keyscan fallback when SSH_KNOWN_HOSTS is not provided.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for Composer and Deployer.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "php_tools": {
+          "description": "Additional tools passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used when package.json is present.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "build_script": {
+          "description": "Optional npm/yarn/pnpm build script before deployment.",
+          "type": "string",
+          "default": "build",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 30,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "SSH key used for deployment targets and private dependencies.",
+          "required": true
+        },
+        "DEPLOY_HOSTNAME": {
+          "description": "Host added to known_hosts before deployment.",
+          "required": false
+        },
+        "DEPLOY_PORT": {
+          "description": "SSH port for known_hosts.",
+          "required": false
+        },
+        "SSH_KNOWN_HOSTS": {
+          "description": "Trusted known_hosts contents for deployment targets.",
+          "required": false
+        },
+        "DEPLOY_USER": {
+          "description": "Deployer user exposed as DEPLOY_USER.",
+          "required": false
+        },
+        "WIREGUARD_CONFIGURATION": {
+          "description": "Optional wg-quick configuration.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        }
+      },
+      "outputs": {
+        "deploy_exit_code": {
+          "description": "Deployer process exit code.",
+          "value": "${{ jobs.deploy.outputs.deploy_exit_code }}"
+        },
+        "deploy_reason": {
+          "description": "Human-readable deployment result.",
+          "value": "${{ jobs.deploy.outputs.deploy_reason }}"
+        },
+        "deploy_warnings": {
+          "description": "Warning lines parsed from Deployer output.",
+          "value": "${{ jobs.deploy.outputs.deploy_warnings }}"
+        },
+        "deploy_log_excerpt": {
+          "description": "Last lines from Deployer output.",
+          "value": "${{ jobs.deploy.outputs.deploy_log_excerpt }}"
+        }
+      }
+    },
+    {
+      "id": "javascript-static-analysis",
+      "file": ".github/workflows/javascript-static-analysis.yml",
+      "inputs": {
+        "node_version": {
+          "description": "Node version used for static analysis.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "node_options": {
+          "description": "NODE_OPTIONS value.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains package.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "command": {
+          "description": "Explicit command to run instead of auto-detecting a script.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_custom_command": {
+          "description": "Allow command execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "script": {
+          "description": "Preferred package script for static analysis.",
+          "type": "string",
+          "default": "typecheck",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 8,
+          "required": false
+        }
+      },
+      "secrets": {
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git user email for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git user name for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "SSH key for private package setups.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "javascript-unit",
+      "file": ".github/workflows/javascript-unit.yml",
+      "inputs": {
+        "node_version": {
+          "description": "Node version used for tests.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "node_options": {
+          "description": "NODE_OPTIONS value.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains package.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "command": {
+          "description": "Explicit command to run instead of auto-detecting a script.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_custom_command": {
+          "description": "Allow command execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "script": {
+          "description": "Preferred package script for tests.",
+          "type": "string",
+          "default": "test",
+          "required": false
+        },
+        "test_args": {
+          "description": "Arguments passed to npm/yarn/pnpm after --.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "artifact_path": {
+          "description": "Optional test artifact path to upload.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "codecov_upload": {
+          "description": "Upload coverage to Codecov when CODECOV_TOKEN is provided.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "codecov_files": {
+          "description": "Coverage file paths passed to Codecov.",
+          "type": "string",
+          "default": "coverage/lcov.info",
+          "required": false
+        },
+        "codecov_flags": {
+          "description": "Codecov flags.",
+          "type": "string",
+          "default": "unittests",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git user email for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git user name for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "SSH key for private package setups.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        },
+        "CODECOV_TOKEN": {
+          "description": "Token used to upload coverage reports to Codecov.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "lint-workflows",
+      "file": ".github/workflows/lint-workflows.yml",
+      "inputs": {
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 5,
+          "required": false
+        }
+      },
+      "secrets": {},
+      "outputs": {}
+    },
+    {
+      "id": "php-coding-standards",
+      "file": ".github/workflows/php-coding-standards.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for PHPCS.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains composer.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "command": {
+          "description": "Explicit command to run instead of auto-detecting PHPCS.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_custom_command": {
+          "description": "Allow command execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "phpcs_args": {
+          "description": "Arguments passed to PHPCS when no Composer script is found.",
+          "type": "string",
+          "default": "--standard=phpcs.xml.dist",
+          "required": false
+        },
+        "annotate": {
+          "description": "Convert checkstyle output to pull request annotations.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 8,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "php-static-analysis",
+      "file": ".github/workflows/php-static-analysis.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for static analysis.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains composer.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "dependency_versions": {
+          "description": "Dependency resolution passed to Composer install. Use locked, highest, or lowest.",
+          "type": "string",
+          "default": "locked",
+          "required": false
+        },
+        "command": {
+          "description": "Explicit command to run instead of auto-detecting PHPStan.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_custom_command": {
+          "description": "Allow command execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "phpstan_args": {
+          "description": "Arguments passed to PHPStan.",
+          "type": "string",
+          "default": "analyse --no-progress --memory-limit=1G",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "php-unit",
+      "file": ".github/workflows/php-unit.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for PHPUnit.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains composer.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "coverage": {
+          "description": "Coverage driver passed to setup-php.",
+          "type": "string",
+          "default": "none",
+          "required": false
+        },
+        "command": {
+          "description": "Explicit command to run instead of auto-detecting PHPUnit.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_custom_command": {
+          "description": "Allow command execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "phpunit_args": {
+          "description": "Arguments passed to PHPUnit when no Composer script is found.",
+          "type": "string",
+          "default": "--no-coverage",
+          "required": false
+        },
+        "junit_artifact": {
+          "description": "Upload JUnit output if junit.xml exists.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "codecov_upload": {
+          "description": "Upload coverage to Codecov when CODECOV_TOKEN is provided.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "codecov_files": {
+          "description": "Coverage file paths passed to Codecov.",
+          "type": "string",
+          "default": "coverage.xml",
+          "required": false
+        },
+        "codecov_flags": {
+          "description": "Codecov flags.",
+          "type": "string",
+          "default": "unittests",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        },
+        "CODECOV_TOKEN": {
+          "description": "Token used to upload coverage reports to Codecov.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "playwright",
+      "file": ".github/workflows/playwright.yml",
+      "inputs": {
+        "working_directory": {
+          "description": "Directory that contains package.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used for Playwright.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "composer_deps_install": {
+          "description": "Install Composer dependencies before tests.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for Composer.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "playwright_browser_args": {
+          "description": "Arguments passed to npx playwright install.",
+          "type": "string",
+          "default": "--with-deps",
+          "required": false
+        },
+        "playwright_script": {
+          "description": "npm/yarn/pnpm script to run. Falls back to npx playwright test.",
+          "type": "string",
+          "default": "test:e2e",
+          "required": false
+        },
+        "playwright_artifact_name": {
+          "description": "Artifact name.",
+          "type": "string",
+          "default": "playwright-report",
+          "required": false
+        },
+        "playwright_artifact_path": {
+          "description": "Repository-root artifact paths to upload.",
+          "type": "string",
+          "default": "playwright-report/\ntest-results/\n",
+          "required": false
+        },
+        "playwright_artifact_retention_days": {
+          "description": "Artifact retention in days.",
+          "type": "number",
+          "default": 30,
+          "required": false
+        },
+        "playwright_artifact_include_hidden_files": {
+          "description": "Include hidden files in artifact upload.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "ngrok_domain": {
+          "description": "Optional reserved ngrok domain.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "pre_script": {
+          "description": "Shell code executed before the test command.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_inline_scripts": {
+          "description": "Allow pre_script execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "testrail_plan_id": {
+          "description": "Optional TestRail plan ID appended to .env.ci.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "testrail_run_id": {
+          "description": "Optional TestRail run ID appended to .env.ci.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "xray_test_exec_key": {
+          "description": "Optional Xray test execution key appended to .env.ci.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 120,
+          "required": false
+        }
+      },
+      "secrets": {
+        "ENV_FILE_DATA": {
+          "description": "Contents written to .env.ci before tests.",
+          "required": false
+        },
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git author email.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git author name.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "SSH key for private dependencies.",
+          "required": false
+        },
+        "NGROK_AUTH_TOKEN": {
+          "description": "Optional ngrok token.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "sympress-qa",
+      "file": ".github/workflows/sympress-qa.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for Composer and QA tools.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used for package asset checks.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "package_glob": {
+          "description": "Glob for Composer packages in monorepos.",
+          "type": "string",
+          "default": "packages/*",
+          "required": false
+        },
+        "include_root": {
+          "description": "Include the repository root when it has composer.json.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "run_validate": {
+          "description": "Run composer validate.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_audit": {
+          "description": "Run composer audit.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_phpcs": {
+          "description": "Run PHPCS or Composer coding standards scripts.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_phpstan": {
+          "description": "Run PHPStan or Composer static analysis scripts.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_phpunit": {
+          "description": "Run PHPUnit or Composer test scripts.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_node_build": {
+          "description": "Run package build scripts for packages with package.json.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 30,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "text-quality",
+      "file": ".github/workflows/text-quality.yml",
+      "inputs": {
+        "run_typos": {
+          "description": "Run typos for fast typo detection.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "typos_files": {
+          "description": "Files or patterns passed to typos.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "typos_config": {
+          "description": "Optional typos configuration file.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "run_cspell": {
+          "description": "Run CSpell for project vocabulary checks.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "cspell_files": {
+          "description": "Newline-separated glob patterns passed to CSpell.",
+          "type": "string",
+          "default": "**/*.{php,js,jsx,ts,tsx,md,txt,json,yml,yaml}",
+          "required": false
+        },
+        "cspell_config": {
+          "description": "Optional CSpell configuration file.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "cspell_incremental_files_only": {
+          "description": "Check only changed files on pull_request or push events.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "run_grammar": {
+          "description": "Run LanguageTool grammar review on pull requests.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "grammar_patterns": {
+          "description": "Space-separated markdown or text glob patterns for LanguageTool.",
+          "type": "string",
+          "default": "**/*.md **/*.txt",
+          "required": false
+        },
+        "grammar_language": {
+          "description": "LanguageTool language code.",
+          "type": "string",
+          "default": "en-US",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {},
+      "outputs": {}
+    },
+    {
+      "id": "woo-qit",
+      "file": ".github/workflows/woo-qit.yml",
+      "inputs": {
+        "artifact_name": {
+          "description": "Artifact produced by wordpress-archive or build-and-distribute.",
+          "type": "string",
+          "required": true
+        },
+        "plugin_folder_name": {
+          "description": "Plugin folder/slug. Falls back to the repository name.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "qit_test": {
+          "description": "QIT test to run.",
+          "type": "string",
+          "default": "activation",
+          "required": false
+        },
+        "qit_options": {
+          "description": "Additional QIT options.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "qit_ref": {
+          "description": "woocommerce/qit-cli commit, tag, or branch used to download the QIT executable.",
+          "type": "string",
+          "default": "2745b88fb76608cd4a5d0e12d8ec4a7609a1a326",
+          "required": false
+        },
+        "qit_sha256": {
+          "description": "Optional SHA256 checksum for the downloaded QIT executable.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 10,
+          "required": false
+        }
+      },
+      "secrets": {
+        "WOO_PARTNER_USER": {
+          "description": "Woo.com partner email.",
+          "required": true
+        },
+        "WOO_PARTNER_SECRET": {
+          "description": "Woo.com QIT token.",
+          "required": true
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "wordpress-archive",
+      "file": ".github/workflows/wordpress-archive.yml",
+      "inputs": {
+        "working_directory": {
+          "description": "Directory that contains the plugin or theme.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for Composer.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "php_extensions": {
+          "description": "Extensions passed to shivammathur/setup-php.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "node_version": {
+          "description": "Node version used for frontend builds.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "composer_options": {
+          "description": "Options passed to Composer install.",
+          "type": "string",
+          "default": "--no-dev --prefer-dist --optimize-autoloader --no-progress --no-interaction",
+          "required": false
+        },
+        "package_name": {
+          "description": "Artifact name. Falls back to the repository name.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "package_folder": {
+          "description": "Folder name inside the artifact. Falls back to package_name.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "package_version": {
+          "description": "Optional version written to plugin/theme headers.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "main_file": {
+          "description": "Main plugin file or theme style.css. Auto-detected when empty.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "run_node_build": {
+          "description": "Run package build script when package.json exists.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "build_script": {
+          "description": "npm/yarn/pnpm script to run.",
+          "type": "string",
+          "default": "build",
+          "required": false
+        },
+        "pre_script": {
+          "description": "Shell code executed before staging the archive.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "allow_inline_scripts": {
+          "description": "Allow pre_script execution. Keep disabled for untrusted callers.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "artifact_allowed_env_files": {
+          "description": "Whitespace-separated .env files that may be shipped. Add .env only when it is intentionally non-secret.",
+          "type": "string",
+          "default": ".env.example .env.dist",
+          "required": false
+        },
+        "artifact_extra_excludes": {
+          "description": "Additional whitespace-separated rsync exclude patterns for the artifact.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "artifact_secret_scan": {
+          "description": "Scan staged artifact files for common secret patterns before upload.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "artifact_manifest": {
+          "description": "Add artifact-manifest.json and artifact-sha256sums.txt to the archive.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "artifact_attestation": {
+          "description": "Attest artifact-manifest.json with GitHub Artifact Attestations. Requires caller permissions actions: read, attestations: write, and id-token: write.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 15,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        },
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {
+        "artifact": {
+          "description": "Uploaded artifact name.",
+          "value": "${{ jobs.wordpress-archive.outputs.artifact }}"
+        }
+      }
+    },
+    {
+      "id": "wordpress-archive-check",
+      "file": ".github/workflows/wordpress-archive-check.yml",
+      "inputs": {
+        "artifact_name": {
+          "description": "Artifact name to download and inspect.",
+          "type": "string",
+          "required": true
+        },
+        "package_folder": {
+          "description": "Optional package folder inside the downloaded artifact.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "php_version": {
+          "description": "PHP version used for archive checks.",
+          "type": "string",
+          "default": "8.5",
+          "required": false
+        },
+        "plugin_check_ref": {
+          "description": "Pinned WordPress/plugin-check ref.",
+          "type": "string",
+          "default": "28f3d9fe6b73cc0c0cedc471db86e73d3607d511",
+          "required": false
+        },
+        "plugin_check_composer_options": {
+          "description": "Composer options used to install WordPress/plugin-check.",
+          "type": "string",
+          "default": "--no-dev --prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "plugin_review_standard": {
+          "description": "PHPCS standard path inside WordPress/plugin-check.",
+          "type": "string",
+          "default": "phpcs-rulesets/plugin-review.xml",
+          "required": false
+        },
+        "excluded_sniffs": {
+          "description": "Space or comma separated PHPCS sniffs excluded from plugin review.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "parallel_lint_excludes": {
+          "description": "Space-separated directories excluded from parallel-lint.",
+          "type": "string",
+          "default": "vendor node_modules",
+          "required": false
+        },
+        "artifact_allowed_env_files": {
+          "description": "Whitespace-separated .env files allowed in the archive.",
+          "type": "string",
+          "default": ".env.example .env.dist",
+          "required": false
+        },
+        "run_plugin_review": {
+          "description": "Run WordPress Plugin Check PHPCS rules when a plugin is detected.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "annotate": {
+          "description": "Convert PHPCS checkstyle output to pull request annotations.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 15,
+          "required": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Composer authentication JSON.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "id": "wp-scripts-lint",
+      "file": ".github/workflows/wp-scripts-lint.yml",
+      "inputs": {
+        "node_version": {
+          "description": "Node version used for linting.",
+          "type": "string",
+          "default": "24",
+          "required": false
+        },
+        "node_options": {
+          "description": "NODE_OPTIONS value.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "npm_registry_domain": {
+          "description": "npm registry URL.",
+          "type": "string",
+          "default": "https://npm.pkg.github.com/",
+          "required": false
+        },
+        "allow_unpinned_node_install": {
+          "description": "Allow npm install when no lockfile exists. Keep disabled for reproducible CI.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "working_directory": {
+          "description": "Directory that contains package.json.",
+          "type": "string",
+          "default": ".",
+          "required": false
+        },
+        "lint_tools": {
+          "description": "JSON array containing js, style, md-docs, and/or pkg-json.",
+          "type": "string",
+          "default": "[\"js\",\"style\",\"md-docs\"]",
+          "required": false
+        },
+        "eslint_args": {
+          "description": "Arguments passed to wp-scripts lint-js.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "stylelint_args": {
+          "description": "Arguments passed to wp-scripts lint-style.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "markdownlint_args": {
+          "description": "Arguments passed to wp-scripts lint-md-docs.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "package_jsonlint_args": {
+          "description": "Arguments passed to wp-scripts lint-pkg-json.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "timeout_minutes": {
+          "description": "Job timeout.",
+          "type": "number",
+          "default": 8,
+          "required": false
+        }
+      },
+      "secrets": {
+        "NPM_REGISTRY_TOKEN": {
+          "description": "npm registry token.",
+          "required": false
+        },
+        "GITHUB_USER_EMAIL": {
+          "description": "Git user email for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_NAME": {
+          "description": "Git user name for private package setups.",
+          "required": false
+        },
+        "GITHUB_USER_SSH_KEY": {
+          "description": "SSH key for private package setups.",
+          "required": false
+        },
+        "ENV_VARS": {
+          "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    }
+  ]
+}

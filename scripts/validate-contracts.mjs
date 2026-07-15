@@ -213,6 +213,15 @@ assert(sympressQa.includes('strategy:'), 'sympress-qa.yml must use a matrix stra
 assert(sympressQa.includes('matrix:'), 'sympress-qa.yml must define a target matrix');
 assert(!sympressQa.includes('for target in "${targets[@]}"'), 'sympress-qa.yml must not run targets serially');
 assert(sympressQa.includes('--ignore=vendor/*,node_modules/*'), 'sympress-qa.yml PHPCS fallback must ignore dependencies');
+for (const [flag, command] of [
+  ['RUN_PHPCS', 'run_phpcs'],
+  ['RUN_PHPSTAN', 'run_static_analysis'],
+  ['RUN_PHPUNIT', 'run_phpunit'],
+]) {
+  const block = `if [ "$${flag}" = "true" ]; then\n            ${command}\n          fi`;
+  assert(sympressQa.includes(block), `sympress-qa.yml must gate ${command} only with ${flag}`);
+}
+assert(!sympressQa.includes('has_script "qa"'), 'sympress-qa.yml must preserve its granular QA input flags');
 
 const deploy = read('.github/workflows/deploy-deployer.yml');
 assert(deploy.includes('environment: ${{ inputs.environment }}'), 'deploy-deployer.yml must bind GitHub environments');
@@ -251,7 +260,10 @@ assert(existsSync(path.join(root, 'scripts', 'doctor.mjs')), 'doctor.mjs must pr
 const packageScripts = packageJson.scripts;
 assert(packageScripts.doctor === 'node scripts/doctor.mjs', 'package.json must expose npm run doctor');
 assert(packageScripts['doctor:repo'] === 'node scripts/doctor.mjs --fail-on high .', 'package.json must expose npm run doctor:repo');
+assert(packageScripts['check:interfaces'], 'package.json must expose the generated workflow interface check');
+assert(packageScripts['test:consumers'], 'package.json must expose consumer contract validation');
 assert(packageScripts['lint:docs'].includes('CODE_OF_CONDUCT.md'), 'lint:docs must include community health Markdown files');
+assert(packageScripts['lint:docs'].includes('AGENTS.md'), 'lint:docs must include agent instructions');
 assert(packageScripts['lint:docs'].includes('.github/**/*.md'), 'lint:docs must include GitHub Markdown templates');
 
 const dependabot = read('.github/dependabot.yml');

@@ -12,6 +12,7 @@ Run all repository checks:
 
 ```bash
 npm run test:contracts
+npm run check:interfaces
 npm run lint:workflows
 npm run lint:docs
 npm run doctor:repo
@@ -29,7 +30,9 @@ npm audit --audit-level=moderate
 | `fixtures` | Minimal projects used by contract tests and policy examples. |
 | `scripts/doctor.mjs` | Consumer repository diagnostics and workflow recommendations. |
 | `scripts/validate-contracts.mjs` | Structural workflow and documentation checks. |
+| `scripts/validate-consumers.mjs` | Checks downstream calls against generated interfaces. |
 | `workflow-catalog.json` | Workflow category, trust, and permission catalog. |
+| `workflow-interfaces.json` | Generated `workflow_call` inputs, secrets, and outputs. |
 
 ## Change Rules
 
@@ -45,7 +48,8 @@ npm audit --audit-level=moderate
   permissions.
 - Do not reintroduce removed static-analysis or generic PHP lint workflows.
 - Update docs and examples with every workflow input or behavior change.
-- Update `workflow-catalog.json` when workflows are added, renamed, or removed.
+- Update `workflow-catalog.json` when workflows are added, renamed, or removed,
+  then run `npm run generate:interfaces`.
 - Add contract-test coverage for new security or DX assumptions.
 
 ## Adding A Workflow

@@ -6,8 +6,11 @@
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
     "doctor:repo": "node scripts/doctor.mjs --fail-on high .",
-    "lint:docs": "markdownlint-cli2 README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md SUPPORT.md docs/**/*.md .github/**/*.md",
+    "generate:interfaces": "node scripts/generate-workflow-interfaces.mjs",
+    "check:interfaces": "node scripts/generate-workflow-interfaces.mjs --check",
+    "lint:docs": "markdownlint-cli2 AGENTS.md README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md SUPPORT.md docs/**/*.md .github/**/*.md",
     "lint:workflows": "actionlint",
+    "test:consumers": "node scripts/validate-consumers.mjs",
     "test:contracts": "node scripts/validate-contracts.mjs"
   },
   "devDependencies": {
