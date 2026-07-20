@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "actionlint": "^2.0.6",
-    "markdownlint-cli2": "^0.23.0",
+    "markdownlint-cli2": "^0.23.1",
     "yaml": "^2.9.0"
   },
   "overrides": {
