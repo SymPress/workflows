@@ -72,20 +72,20 @@ jobs:
       checks: write
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Run typos
         if: ${{ inputs.run_typos }}
-        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
+        uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f # v1.49.0
         with:
           files: ${{ inputs.typos_files }}
           config: ${{ inputs.typos_config }}
 
       - name: Run CSpell
         if: ${{ inputs.run_cspell }}
-        uses: streetsidesoftware/cspell-action@de2a73e963e7443969755b648a1008f77033c5b2 # v8.4.0
+        uses: streetsidesoftware/cspell-action@e0668cf020899e887ee8ad4d173c31738a79eae8 # v9.0.1
         with:
           files: ${{ inputs.cspell_files }}
           config: ${{ inputs.cspell_config }}
@@ -104,7 +104,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
