@@ -14,3 +14,6 @@ jobs:
     uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
     with:
       php_version: '8.5'
+    secrets:
+      SSH_KEY: ${{ secrets.COMPOSER_SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.COMPOSER_SSH_KNOWN_HOSTS }}

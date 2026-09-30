@@ -203,6 +203,7 @@ jobs:
           printf '%s\n' "StrictHostKeyChecking=accept-new" "CheckHostIP=no" "HashKnownHosts=no" > .ddev/homeadditions/.ssh/config
           if [ -n "$SSH_KNOWN_HOSTS" ]; then
             printf '%s\n' "$SSH_KNOWN_HOSTS" > .ddev/homeadditions/.ssh/known_hosts
+            printf '%s\n' "StrictHostKeyChecking=yes" "CheckHostIP=no" "HashKnownHosts=no" > .ddev/homeadditions/.ssh/config
           fi
           chmod 700 .ddev/homeadditions/.ssh
           chmod 600 .ddev/homeadditions/.ssh/id_rsa .ddev/homeadditions/.ssh/config

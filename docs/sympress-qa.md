@@ -45,5 +45,13 @@ Secrets:
 | Secret | Description |
 | --- | --- |
 | `COMPOSER_AUTH_JSON` | Composer auth JSON for private packages. |
+| `SSH_KEY` | Optional read-only deploy key for private Git dependencies. |
+| `SSH_KNOWN_HOSTS` | Pinned host keys; required when `SSH_KEY` is supplied. |
 | `NPM_REGISTRY_TOKEN` | npm registry token for package builds. |
 | `ENV_VARS` | JSON object or array of `{ "name": "...", "value": "..." }`. |
+
+SSH credentials are written only to private files in the job's temporary directory
+and removed even when QA fails. Host verification is strict; no host-key scan or
+personal GitHub token is required. Repository-scoped deploy keys should grant read
+access only to the dependency repository. Forward both SSH secrets explicitly
+from the caller, as in `examples/sympress-package-qa.yml`.
