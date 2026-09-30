@@ -10,6 +10,12 @@ jobs:
     uses: sympress/workflows/.github/workflows/composer-validate.yml@v1
 ```
 
+`composer-validate.yml` also accepts optional `SSH_KEY` and `SSH_KNOWN_HOSTS`
+secrets for private Git dependencies. Supply a read-only deploy key and pinned
+host keys together. The job uses strict host verification and removes its
+temporary credentials even after a failed install. HTTPS repositories can
+continue using `COMPOSER_AUTH_JSON`.
+
 ## Coding Standards
 
 ```yml

@@ -517,6 +517,14 @@
         }
       },
       "secrets": {
+        "SSH_KEY": {
+          "description": "Optional read-only SSH deploy key for private Composer repositories.",
+          "required": false
+        },
+        "SSH_KNOWN_HOSTS": {
+          "description": "Required pinned known_hosts entries when SSH_KEY is provided.",
+          "required": false
+        },
         "COMPOSER_AUTH_JSON": {
           "description": "Composer authentication JSON.",
           "required": false
@@ -1503,6 +1511,14 @@
         }
       },
       "secrets": {
+        "SSH_KEY": {
+          "description": "Optional read-only SSH deploy key for private Composer repositories.",
+          "required": false
+        },
+        "SSH_KNOWN_HOSTS": {
+          "description": "Required pinned known_hosts entries when SSH_KEY is provided.",
+          "required": false
+        },
         "COMPOSER_AUTH_JSON": {
           "description": "Composer authentication JSON.",
           "required": false

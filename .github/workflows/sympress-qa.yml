@@ -74,6 +74,12 @@ on:
         default: 30
         required: false
     secrets:
+      SSH_KEY:
+        description: Optional read-only SSH deploy key for private Composer repositories.
+        required: false
+      SSH_KNOWN_HOSTS:
+        description: Required pinned known_hosts entries when SSH_KEY is provided.
+        required: false
       COMPOSER_AUTH_JSON:
         description: Composer authentication JSON.
         required: false
@@ -155,6 +161,23 @@ jobs:
       - name: Report empty repository
         if: ${{ matrix.target == '__no_targets__' }}
         run: echo "No Composer targets found."
+
+      - name: Configure Composer SSH
+        env:
+          COMPOSER_SSH_KEY: ${{ secrets.SSH_KEY }}
+          COMPOSER_SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        if: ${{ env.COMPOSER_SSH_KEY != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$COMPOSER_SSH_KNOWN_HOSTS" ]; then
+            echo "::error::SSH_KNOWN_HOSTS is required with SSH_KEY."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$COMPOSER_SSH_KEY" > "$RUNNER_TEMP/composer-deploy-key"
+          printf '%s\n' "$COMPOSER_SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/composer-known-hosts"
+          printf 'GIT_SSH_COMMAND=ssh -i "%s/composer-deploy-key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="%s/composer-known-hosts"\n' "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
 
       - name: Export custom environment
         env:
@@ -429,3 +452,8 @@ jobs:
           if [ "$RUN_NODE_BUILD" = "true" ]; then
             run_node_build
           fi
+
+      - name: Remove Composer SSH credentials
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/composer-deploy-key" "$RUNNER_TEMP/composer-known-hosts"

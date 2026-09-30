@@ -327,6 +327,14 @@ assert(textQuality.includes('pull-requests: write'), 'text-quality.yml must gran
 
 assert(existsSync(workflowDir), 'workflow directory must exist');
 
+for (const file of ['sympress-qa.yml', 'composer-validate.yml']) {
+  const text = read(`.github/workflows/${file}`);
+  assert(text.includes('SSH_KNOWN_HOSTS is required with SSH_KEY'), `${file} must reject missing pinned host keys`);
+  assert(text.includes('StrictHostKeyChecking=yes'), `${file} must enforce SSH host verification`);
+  assert(text.includes('umask 077'), `${file} must keep SSH credentials private`);
+  assert(text.includes('Remove Composer SSH credentials\n        if: ${{ always() }}'), `${file} must clean up SSH credentials on failure`);
+}
+
 if (failures.length > 0) {
   console.error('Contract validation failed:');
   for (const failure of failures) {
