@@ -15,15 +15,27 @@ The workflow supports:
 
 - DDEV PHP and Node version overrides;
 - host and DDEV environment variables from JSON secrets;
-- Composer auth and npm auth files;
-- SSH home additions for private dependencies;
+- private install-only Composer, npm, and SSH authentication;
+- verified SSH known hosts required when an install key is supplied;
 - optional ngrok setup through a caller-provided command;
 - artifact upload and DDEV shutdown on failure.
 
-The default Playwright install command uses pnpm, yarn, or npm lockfiles inside
-DDEV and fails when no lockfile exists. Use `allow_unpinned_node_install: true`
-only for the legacy `ddev exec npm install && npx playwright install --with-deps`
-compatibility command.
+DDEV starts with an empty read-only authentication mount. Private files are
+created only for locked dependency fetches, with mode 0600, and removed on success
+or failure before setup, Playwright installation, builds, and tests. Composer
+fetches use `--no-scripts --no-plugins`; Node fetches disable lifecycle scripts,
+including workspace builds on modern Yarn. Private SSH fetches use supplied
+verified known hosts with strict verification; credentials are never copied into
+DDEV home additions or repository auth files. The workflow checks the host and
+container mount are empty before running project code and repeats cleanup before
+shutdown.
+
+The default browser install is `npx --no-install playwright install --with-deps`
+inside DDEV. Commit dependency lockfiles and install Playwright through the locked
+project dependencies. Any application initialization previously performed by
+Composer or npm lifecycle hooks must run explicitly in the subsequent authorized
+setup/build step. The legacy unpinned command requires the explicit unpinned-install opt-in;
+other custom commands require the custom-command opt-in.
 
 Custom DDEV, setup, Playwright, and ngrok commands are disabled by default.
 Set `allow_custom_commands: true` only for trusted workflow calls. Hidden files

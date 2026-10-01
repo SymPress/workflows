@@ -567,7 +567,7 @@
         "playwright_install_command": {
           "description": "Command that installs Playwright dependencies.",
           "type": "string",
-          "default": "ddev exec bash -lc \"if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo 'No JavaScript lockfile found.'; exit 1; fi\" && npx playwright install --with-deps",
+          "default": "npx --no-install playwright install --with-deps",
           "required": false
         },
         "playwright_run_command": {
@@ -761,8 +761,16 @@
           "description": "Composer authentication JSON.",
           "required": false
         },
+        "INSTALL_SSH_KEY": {
+          "description": "Separate read-only SSH key for fetching private Composer dependencies.",
+          "required": false
+        },
+        "INSTALL_SSH_KNOWN_HOSTS": {
+          "description": "Verified host keys for private dependency fetches.",
+          "required": false
+        },
         "GITHUB_USER_SSH_KEY": {
-          "description": "SSH key used for deployment targets and private dependencies.",
+          "description": "SSH key used only for deployment targets.",
           "required": true
         },
         "DEPLOY_HOSTNAME": {

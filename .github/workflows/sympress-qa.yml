@@ -149,6 +149,7 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
     env:
+      CI: true
       COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
       ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
@@ -286,6 +287,7 @@ jobs:
           RUN_NODE_BUILD: ${{ inputs.run_node_build }}
         run: |
           set -euo pipefail
+          export CI=true
 
           has_script() {
             local script="$1"
@@ -351,14 +353,15 @@ jobs:
             phpcs_bin="${bin_dir%/}/phpcs"
 
             if [ ! -x "$phpcs_bin" ]; then
-              echo "No PHPCS configuration or executable found."
-              return
+              echo "::error::Required PHPCS executable is missing."
+              return 1
             fi
 
             if [ -f phpcs.xml ] || [ -f phpcs.xml.dist ]; then
               "$phpcs_bin" --standard="$(test -f phpcs.xml && echo phpcs.xml || echo phpcs.xml.dist)"
             else
-              "$phpcs_bin" --standard=PSR12 --ignore=vendor/*,node_modules/* .
+              echo "::error::Required PHPCS configuration is missing."
+              return 1
             fi
           }
 
@@ -393,7 +396,8 @@ jobs:
             fi
 
             if [ "$ran" = false ]; then
-              echo "No PHPStan configuration found."
+              echo "::error::Required PHPStan configuration is missing."
+              return 1
             fi
           }
 
@@ -418,7 +422,8 @@ jobs:
               bin_dir="$(composer config bin-dir)"
               "${bin_dir%/}/phpunit" --no-coverage
             else
-              echo "No PHPUnit configuration found."
+              echo "::error::Required PHPUnit configuration is missing."
+              return 1
             fi
           }
 
@@ -437,16 +442,18 @@ jobs:
             fi
           fi
 
-          if [ "$RUN_PHPCS" = "true" ]; then
-            run_phpcs
-          fi
-
-          if [ "$RUN_PHPSTAN" = "true" ]; then
-            run_static_analysis
-          fi
-
-          if [ "$RUN_PHPUNIT" = "true" ]; then
-            run_phpunit
+          if [ "$RUN_PHPCS" = "true" ] && [ "$RUN_PHPSTAN" = "true" ] && [ "$RUN_PHPUNIT" = "true" ] && has_script "qa"; then
+            composer qa
+          else
+            if [ "$RUN_PHPCS" = "true" ]; then
+              run_phpcs
+            fi
+            if [ "$RUN_PHPSTAN" = "true" ]; then
+              run_static_analysis
+            fi
+            if [ "$RUN_PHPUNIT" = "true" ]; then
+              run_phpunit
+            fi
           fi
 
           if [ "$RUN_NODE_BUILD" = "true" ]; then

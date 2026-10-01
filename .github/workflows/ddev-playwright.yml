@@ -26,7 +26,7 @@ on:
       playwright_install_command:
         description: Command that installs Playwright dependencies.
         type: string
-        default: ddev exec bash -lc "if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo 'No JavaScript lockfile found.'; exit 1; fi" && npx playwright install --with-deps
+        default: npx --no-install playwright install --with-deps
         required: false
       playwright_run_command:
         description: Command that runs Playwright tests.
@@ -139,7 +139,7 @@ jobs:
           blocked=()
           [ "$DDEV_START_COMMAND" = "ddev start" ] || blocked+=("ddev_start_command")
           [ -z "$SETUP_COMMAND" ] || blocked+=("setup_command")
-          default_install='ddev exec bash -lc "if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo '\''No JavaScript lockfile found.'\''; exit 1; fi" && npx playwright install --with-deps'
+          default_install='npx --no-install playwright install --with-deps'
           legacy_unpinned_install="ddev exec npm install && npx playwright install --with-deps"
           if [ "$PLAYWRIGHT_INSTALL_COMMAND" != "$default_install" ]; then
             if [ "$ALLOW_UNPINNED_NODE_INSTALL" != "true" ] || [ "$PLAYWRIGHT_INSTALL_COMMAND" != "$legacy_unpinned_install" ]; then
@@ -192,22 +192,6 @@ jobs:
               core.exportVariable(name, String(item.value));
             }
 
-      - name: Configure DDEV SSH key
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-        if: ${{ env.SSH_KEY != '' }}
-        run: |
-          mkdir -p .ddev/homeadditions/.ssh
-          printf '%s\n' "$SSH_KEY" > .ddev/homeadditions/.ssh/id_rsa
-          printf '%s\n' "StrictHostKeyChecking=accept-new" "CheckHostIP=no" "HashKnownHosts=no" > .ddev/homeadditions/.ssh/config
-          if [ -n "$SSH_KNOWN_HOSTS" ]; then
-            printf '%s\n' "$SSH_KNOWN_HOSTS" > .ddev/homeadditions/.ssh/known_hosts
-            printf '%s\n' "StrictHostKeyChecking=yes" "CheckHostIP=no" "HashKnownHosts=no" > .ddev/homeadditions/.ssh/config
-          fi
-          chmod 700 .ddev/homeadditions/.ssh
-          chmod 600 .ddev/homeadditions/.ssh/id_rsa .ddev/homeadditions/.ssh/config
-
       - name: Set up DDEV
         uses: ddev/github-action-setup-ddev@fdf2f5c97943bae638f31df6df86f1defa6210c0 # v1
         with:
@@ -218,8 +202,6 @@ jobs:
         env:
           PHP_VERSION: ${{ inputs.php_version }}
           NODE_VERSION: ${{ inputs.node_version }}
-          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
-          NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
           ddev config --web-environment-add="CI=true"
@@ -229,15 +211,15 @@ jobs:
           if [ -n "$NODE_VERSION" ]; then
             ddev config --nodejs-version "$NODE_VERSION"
           fi
-          if [ -n "$COMPOSER_AUTH" ]; then
-            printf '%s\n' "$COMPOSER_AUTH" > auth.json
-          fi
-          if [ -n "$NPM_TOKEN" ]; then
-            {
-              echo "//npm.pkg.github.com/:_authToken=$NPM_TOKEN"
-              echo "@sympress:registry=https://npm.pkg.github.com/"
-            } > .npmrc
-          fi
+          umask 077
+          auth_dir="${RUNNER_TEMP}/sympress-install-auth"
+          mkdir -p "$auth_dir"
+          cat > .ddev/docker-compose.install-auth.yaml <<YAML
+          services:
+            web:
+              volumes:
+                - "$auth_dir:/run/sympress-install-auth:ro"
+          YAML
 
       - name: Add DDEV environment variables
         env:
@@ -283,6 +265,81 @@ jobs:
         run: |
           set -euo pipefail
           bash -lc "$DDEV_START_COMMAND"
+
+      - name: Install dependencies with private authentication
+        shell: bash
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+          NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_dir="${RUNNER_TEMP}/sympress-install-auth"
+          trap 'rm -f "$auth_dir"/*' EXIT
+          if [ -n "$COMPOSER_AUTH" ]; then
+            printf '%s\n' "$COMPOSER_AUTH" > "$auth_dir/auth.json"
+          fi
+          if [ -n "$NPM_TOKEN" ]; then
+            printf '//npm.pkg.github.com/:_authToken=%s\n@sympress:registry=https://npm.pkg.github.com/\n' "$NPM_TOKEN" > "$auth_dir/npmrc"
+          fi
+          if [ -n "$SSH_KEY" ]; then
+            test -n "$SSH_KNOWN_HOSTS" || { echo "::error::SSH_KNOWN_HOSTS is required with SSH_KEY."; exit 1; }
+            printf '%s\n' "$SSH_KEY" > "$auth_dir/key"
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > "$auth_dir/known_hosts"
+            while IFS= read -r host_key || [ -n "$host_key" ]; do
+              [[ "$host_key" =~ ^[[:space:]]*(#|$) ]] && continue
+              printf '%s\n' "$host_key" | ssh-keygen -l -f /dev/stdin >/dev/null
+            done < "$auth_dir/known_hosts"
+            ssh-keygen -l -f "$auth_dir/known_hosts" >/dev/null
+          fi
+          # Variables expand inside the container, not on the host.
+          # shellcheck disable=SC2016
+          ddev exec bash -c '
+            set -euo pipefail
+            export GIT_SSH_COMMAND="ssh -i /run/sympress-install-auth/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/run/sympress-install-auth/known_hosts"
+            if [ -f /run/sympress-install-auth/auth.json ]; then
+              export COMPOSER_AUTH="$(cat /run/sympress-install-auth/auth.json)"
+            fi
+            if [ -f composer.json ]; then
+              test -f composer.lock
+              composer validate --strict --no-check-publish
+              composer install --no-interaction --no-progress --no-scripts --no-plugins
+            fi
+          '
+          export NPM_CONFIG_USERCONFIG="$auth_dir/npmrc"
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile --ignore-scripts
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            version="$(yarn --version)"
+            if [[ "$version" == 1.* ]]; then
+              yarn install --frozen-lockfile --ignore-scripts
+            elif [[ "$version" == 2.* ]]; then
+              YARN_NPM_AUTH_TOKEN="${NODE_AUTH_TOKEN:-${NPM_TOKEN:-}}" YARN_ENABLE_SCRIPTS=false yarn install --immutable --skip-builds
+            elif [[ "$version" =~ ^[3-9][0-9]*\. ]]; then
+              YARN_NPM_AUTH_TOKEN="${NODE_AUTH_TOKEN:-${NPM_TOKEN:-}}" YARN_ENABLE_SCRIPTS=false yarn install --immutable --mode=skip-build
+            else
+              echo "::error::Unsupported Yarn generation."
+              exit 1
+            fi
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci --ignore-scripts
+          else
+            echo "::error::No JavaScript lockfile found."
+            exit 1
+          fi
+
+      - name: Verify install credentials removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(find "${RUNNER_TEMP}/sympress-install-auth" -type f -print -quit)"
+          # Variables expand inside the container, not on the host.
+          # shellcheck disable=SC2016
+          ddev exec bash -c 'test -z "$(find /run/sympress-install-auth -type f -print -quit)"; test -z "${SSH_AUTH_SOCK:-}"'
 
       - name: Run setup command
         if: ${{ inputs.setup_command != '' }}
@@ -380,6 +437,16 @@ jobs:
           path: ${{ inputs.playwright_artifact_path }}
           if-no-files-found: ignore
           include-hidden-files: ${{ inputs.playwright_artifact_include_hidden_files }}
+
+      - name: Remove install credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -f "${RUNNER_TEMP}/sympress-install-auth"/*
+          # Variables expand inside the container, not on the host.
+          # shellcheck disable=SC2016
+          ddev exec bash -c 'test -z "$(find /run/sympress-install-auth -type f -print -quit)"' || true
+          rm -f .ddev/docker-compose.install-auth.yaml
 
       - name: Stop DDEV
         if: ${{ always() }}

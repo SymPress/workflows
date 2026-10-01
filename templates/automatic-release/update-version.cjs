@@ -14,6 +14,9 @@ function updateJson(file) {
 
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   data.version = version;
+  if (file === 'package-lock.json' && data.packages && data.packages['']) {
+    data.packages[''].version = version;
+  }
   fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
 }
 

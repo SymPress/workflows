@@ -17,22 +17,39 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
 ```
 
-The workflow installs project dependencies, optionally builds frontend assets, installs deployment dependencies, configures SSH known hosts, and runs Deployer.
+The project and deployment directory must each commit a valid `composer.lock`.
+Their installs validate the lock and use `--no-dev --no-scripts --no-plugins`.
+Private Composer authentication is available only during those fetch steps.
+Private Git dependencies can use the separate read-only `INSTALL_SSH_KEY` and
+verified `INSTALL_SSH_KNOWN_HOSTS` secrets. The production deployment key is loaded
+after dependency installation and authorized builds, immediately before deployment.
+
+Node installs require a selected npm, pnpm, or Yarn lockfile and disable lifecycle
+scripts. Yarn 1 uses `--frozen-lockfile --ignore-scripts`; Yarn 2 uses `--immutable
+--skip-builds`; Yarn 3 and 4 use `--immutable --mode=skip-build`. Builds run in a
+separate step without install tokens or an SSH agent. Any required Composer
+post-install/plugin work must be explicitly moved to an authorized credential-free
+build step before adopting this workflow.
 
 WireGuard is supported through the `WIREGUARD_CONFIGURATION` secret.
 
 Deployments are bound to the requested GitHub environment and serialized per
-environment. Prefer `SSH_KNOWN_HOSTS` for host verification. The `ssh-keyscan`
-fallback is disabled unless `allow_ssh_keyscan: true` is set.
+environment. `SSH_KNOWN_HOSTS` must contain verified host keys; empty or malformed
+files fail. Host verification is strict. The legacy `allow_ssh_keyscan` and
+`allow_unpinned_node_install` inputs remain accepted for caller compatibility,
+but cannot enable deployment host scans or unlocked installs.
 
 Custom `deploy_command` values require `allow_custom_deploy_command: true`.
-Keep the default command for normal deployments.
+Keep the default command for normal deployments. A gated custom shell command
+receives the validated environment and verbosity as positional `$1` and `$2`.
+Invalid inputs, any nonzero Deployer or tee status, cancellation, and missing or
+nonnumeric result output fail the job. Cleanup runs even when deployment fails.
 
 Outputs exposed to caller workflows:
 
 | Output | Description |
 | --- | --- |
 | `deploy_exit_code` | Deployer process exit code. |
-| `deploy_reason` | Short parsed deployment result. |
-| `deploy_warnings` | Warning-like lines parsed from Deployer output. |
-| `deploy_log_excerpt` | Last lines of Deployer output for notifications. |
+| `deploy_reason` | Bounded generic result without raw log content. |
+| `deploy_warnings` | Retained compatibility output; empty. |
+| `deploy_log_excerpt` | Retained compatibility output; empty. |

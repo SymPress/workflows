@@ -80,8 +80,10 @@ prefer adding a lockfile instead.
 ## SSH And Deployments
 
 `deploy-deployer.yml` binds the job to the requested GitHub environment and
-serializes deployments per environment. Prefer `SSH_KNOWN_HOSTS` over
-`ssh-keyscan`. The `allow_ssh_keyscan` fallback is opt-in.
+serializes deployments per environment. Verified `SSH_KNOWN_HOSTS` are mandatory;
+its compatibility scan input cannot bypass that requirement. Dependency fetches
+and builds finish before production SSH or WireGuard credentials are loaded.
+Deployment rejects unlocked Node installs even when the compatibility input is set.
 
 For build-branch pushes over SSH, provide `GITHUB_KNOWN_HOSTS`. The
 `allow_github_ssh_keyscan` fallback is opt-in for repositories that accept
@@ -93,9 +95,11 @@ trust-on-first-use behavior.
   tag kept as an inline comment.
 - Dependabot monitors GitHub Actions and npm dependencies so pinned refs can be
   updated through grouped pull requests instead of floating tags.
-- `automatic-release.yml` installs pinned semantic-release packages.
+- `automatic-release.yml` installs a committed transitive release-tool lockfile
+  with lifecycle scripts disabled and uses ephemeral Git authentication.
 - `woo-qit.yml` downloads QIT from a pinned ref and supports `qit_sha256`.
-- Repository checks include actionlint, contract tests, doctor gates, and
+- Repository checks include actionlint, contract tests, real Bash failure fixtures,
+  locked release dry runs, doctor gates, and
   zizmor.
 
 ## Permissions
