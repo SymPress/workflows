@@ -91,6 +91,9 @@ jobs:
       - name: Exercise runner shell failure paths
         run: npm run test:shell
 
+      - name: Exercise canary incident lifecycle
+        run: npm run test:canary
+
       - name: Exercise locked release tooling
         run: npm run test:release
 

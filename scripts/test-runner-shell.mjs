@@ -80,6 +80,14 @@ try {
   assert.equal(run(qa.run, flags).status, 1);
   assert.equal(run(qa.run, { ...flags, RUN_PHPCS: 'false', RUN_PHPSTAN: 'false', RUN_PHPUNIT: 'false' }).status, 0);
   checks += 2;
+  executable(path.join(root, 'fake-bin/composer'), 'printf "%s\\n" "$1" >> composer-calls; if [ "$1" = update ]; then exit "${UPDATE_EXIT:-0}"; fi; exit 0');
+  const updateFlags = { ...flags, RUN_PHPCS: 'false', RUN_PHPSTAN: 'false', RUN_PHPUNIT: 'false', UPDATE_DEPENDENCIES: 'true' };
+  assert.equal(run(qa.run, updateFlags).status, 0);
+  assert.deepEqual(readFileSync(path.join(root, 'composer-calls'), 'utf8').trim().split('\n'), ['update', 'install']);
+  rmSync(path.join(root, 'composer-calls'));
+  assert.equal(run(qa.run, { ...updateFlags, UPDATE_EXIT: '7' }).status, 7);
+  assert.deepEqual(readFileSync(path.join(root, 'composer-calls'), 'utf8').trim().split('\n'), ['update']);
+  checks += 2;
   // A fake install tool confirms secrets exist only during fetch and private files
   // are removed by the actual dependency-step EXIT trap, including failures.
   executable(path.join(root, 'fake-bin/npm'), 'test -f "$NPM_CONFIG_USERCONFIG" || exit 8; printf "%s" "$NPM_CONFIG_USERCONFIG" > auth-path; exit "${INSTALL_EXIT:-0}"');

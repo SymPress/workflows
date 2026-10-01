@@ -438,6 +438,34 @@
       }
     },
     {
+      "id": "dependency-canary",
+      "file": ".github/workflows/dependency-canary.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for the current stable dependency resolution.",
+          "type": "string",
+          "default": "8.5"
+        },
+        "php_extensions": {
+          "description": "Additional PHP extensions required by the package tests.",
+          "type": "string",
+          "default": ""
+        },
+        "run_node_build": {
+          "description": "Also build the committed Node dependency lock.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Optional read-only Composer authentication for private dependencies.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
       "id": "codeql",
       "file": ".github/workflows/codeql.yml",
       "inputs": {
@@ -1473,6 +1501,12 @@
           "description": "Options passed to Composer install.",
           "type": "string",
           "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "update_dependencies": {
+          "description": "Resolve current permitted dependency versions before QA; use for scheduled compatibility checks.",
+          "type": "boolean",
+          "default": false,
           "required": false
         },
         "run_validate": {

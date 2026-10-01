@@ -36,6 +36,7 @@ Useful inputs:
 | --- | --- | --- |
 | `include_root` | `true` | Run the root `composer.json` when present. |
 | `package_glob` | `packages/*` | Composer package discovery glob. |
+| `update_dependencies` | `false` | Resolve current permitted Composer dependencies before QA. |
 | `run_validate` | `true` | Run `composer validate`. |
 | `run_audit` | `true` | Run `composer audit`. |
 | `run_phpcs` | `true` | Run PHPCS or coding standards scripts. |

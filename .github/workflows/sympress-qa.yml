@@ -38,6 +38,11 @@ on:
         type: string
         default: --prefer-dist --no-progress --no-interaction
         required: false
+      update_dependencies:
+        description: Resolve current permitted dependency versions before QA; use for scheduled compatibility checks.
+        type: boolean
+        default: false
+        required: false
       run_validate:
         description: Run composer validate.
         type: boolean
@@ -285,6 +290,7 @@ jobs:
           RUN_PHPSTAN: ${{ inputs.run_phpstan }}
           RUN_PHPUNIT: ${{ inputs.run_phpunit }}
           RUN_NODE_BUILD: ${{ inputs.run_node_build }}
+          UPDATE_DEPENDENCIES: ${{ inputs.update_dependencies }}
         run: |
           set -euo pipefail
           export CI=true
@@ -426,6 +432,11 @@ jobs:
               return 1
             fi
           }
+
+          if [ "${UPDATE_DEPENDENCIES:-false}" = "true" ]; then
+            # shellcheck disable=SC2086
+            composer update $COMPOSER_OPTIONS
+          fi
 
           if [ "$RUN_VALIDATE" = "true" ]; then
             composer validate --strict --no-check-publish

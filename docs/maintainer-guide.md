@@ -17,6 +17,7 @@ Run all repository checks:
 ```bash
 npm run test:contracts
 npm run test:shell
+npm run test:canary
 npm run test:release
 npm run check:interfaces
 npm run lint:workflows

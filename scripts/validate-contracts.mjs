@@ -209,6 +209,12 @@ for (const [file, gate] of [
 }
 
 const sympressQa = read('.github/workflows/sympress-qa.yml');
+const dependencyCanary = parseDocument(read('.github/workflows/dependency-canary.yml')).toJS();
+assert(dependencyCanary.jobs.qa.with.update_dependencies === true, 'dependency canary must resolve current permitted dependencies');
+assert(dependencyCanary.jobs.qa.permissions.contents === 'read' && !dependencyCanary.jobs.qa.permissions.issues, 'canary build must not receive issue write permission');
+assert(dependencyCanary.jobs.incident.permissions.issues === 'write', 'canary incident job must receive issue write permission');
+assert(dependencyCanary.jobs.incident.steps.length === 1 && !dependencyCanary.jobs.incident.steps[0].run, 'incident notification must not install or execute project code');
+assert(sympressQa.includes('UPDATE_DEPENDENCIES: ${{ inputs.update_dependencies }}'), 'current dependency resolution must be opt-in through an environment variable');
 assert(sympressQa.includes('strategy:'), 'sympress-qa.yml must use a matrix strategy');
 assert(sympressQa.includes('matrix:'), 'sympress-qa.yml must define a target matrix');
 assert(!sympressQa.includes('for target in "${targets[@]}"'), 'sympress-qa.yml must not run targets serially');
