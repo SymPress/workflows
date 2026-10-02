@@ -257,8 +257,8 @@ const releaseLock = JSON.parse(read('templates/automatic-release/package-lock.js
 assert(releaseManifest.overrides['@semantic-release/npm'] === '$@sympress/release-disabled-npm-plugin', 'unused npm publication engine must be replaced by explicit local guard');
 assert(!releaseLock.packages['node_modules/npm'], 'release tooling must not install unused vulnerable bundled npm');
 assert(!read('templates/automatic-release/release.config.cjs').includes('@semantic-release/npm'), 'fallback release config must only use supported release plugins');
-assert(releaseManifest.dependencies['semantic-release'] === '25.0.5', 'locked release tooling must pin semantic-release');
-assert(releaseLock.packages['node_modules/semantic-release'].version === '25.0.5', 'release lock must pin transitive tooling');
+assert(releaseManifest.dependencies['semantic-release'] === '25.0.9', 'locked release tooling must pin semantic-release');
+assert(releaseLock.packages['node_modules/semantic-release'].version === '25.0.9', 'release lock must pin transitive tooling');
 assert(release.includes('npm ci --prefix "$tools_dir" --ignore-scripts'), 'release tools must be installed locked without lifecycle scripts');
 assert(!release.includes('x-access-token:${'), 'release PAT must not be embedded into a Git URL');
 assert(release.includes('GIT_CONFIG_KEY_0=credential.helper'), 'release Git auth must be ephemeral');
