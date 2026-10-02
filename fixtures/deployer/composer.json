@@ -1,0 +1,16 @@
+{
+  "name": "sympress/deployer-fixture",
+  "description": "Isolated local deployment contract fixture",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": "^8.5",
+    "deployer/deployer": "^8.0"
+  },
+  "config": {
+    "platform": {
+      "php": "8.5.0"
+    },
+    "sort-packages": true
+  }
+}

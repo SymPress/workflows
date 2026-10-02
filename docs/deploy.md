@@ -53,3 +53,16 @@ Outputs exposed to caller workflows:
 | `deploy_reason` | Bounded generic result without raw log content. |
 | `deploy_warnings` | Retained compatibility output; empty. |
 | `deploy_log_excerpt` | Retained compatibility output; empty. |
+
+The workflow uses three isolated jobs. `dependencies` installs the project and
+Deployer locks with scripts and plugins disabled and fetch-only credentials.
+`build` restores that run's artifact and runs application build scripts without
+any operator secrets or deployment environment. `deploy` restores the built
+artifact by its exact ID, verifies its source commit and run, then loads SSH
+and optional WireGuard credentials. Secret files, authentication configuration,
+VCS metadata and caches are excluded; external links fail packaging.
+
+The default SSH transport requires `GITHUB_USER_SSH_KEY` at runtime.
+Set `use_ssh: false` only for Deployer recipes using local or non-SSH hosts.
+The repository's local Deployer fixture exercises the same three jobs and
+checks that build output reaches deployment while inert credential files do not.

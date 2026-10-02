@@ -783,6 +783,12 @@
           "default": "build",
           "required": false
         },
+        "use_ssh": {
+          "description": "Enable SSH transport; disable for local Deployer hosts without deployment keys.",
+          "type": "boolean",
+          "default": true,
+          "required": false
+        },
         "timeout_minutes": {
           "description": "Job timeout.",
           "type": "number",
@@ -804,8 +810,8 @@
           "required": false
         },
         "GITHUB_USER_SSH_KEY": {
-          "description": "SSH key used only for deployment targets.",
-          "required": true
+          "description": "SSH key used only for deployment targets; required when use_ssh is true.",
+          "required": false
         },
         "DEPLOY_HOSTNAME": {
           "description": "Host added to known_hosts before deployment.",

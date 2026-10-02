@@ -72,6 +72,11 @@ on:
         type: string
         default: build
         required: false
+      use_ssh:
+        description: Enable SSH transport; disable for local Deployer hosts without deployment keys.
+        type: boolean
+        default: true
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -88,8 +93,8 @@ on:
         description: Verified host keys for private dependency fetches.
         required: false
       GITHUB_USER_SSH_KEY:
-        description: SSH key used only for deployment targets.
-        required: true
+        description: SSH key used only for deployment targets; required when use_ssh is true.
+        required: false
       DEPLOY_HOSTNAME:
         description: Host added to known_hosts before deployment.
         required: false
@@ -126,19 +131,12 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
-    name: Deploy
+  dependencies:
+    name: Fetch locked dependencies
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
-    environment: ${{ inputs.environment }}
-    concurrency:
-      group: deploy-${{ github.repository }}-${{ inputs.environment }}
-      cancel-in-progress: false
     outputs:
-      deploy_exit_code: ${{ steps.run-deployer.outputs.exit_code }}
-      deploy_reason: ${{ steps.run-deployer.outputs.reason }}
-      deploy_warnings: ${{ steps.run-deployer.outputs.warnings }}
-      deploy_log_excerpt: ${{ steps.run-deployer.outputs.log_excerpt }}
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     env:
       COMPOSER_NO_DEV: 1
       ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
@@ -161,7 +159,7 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: |
           test -f composer.lock
-          composer validate --strict --no-check-publish
+          composer --no-plugins validate --strict --no-check-publish
 
       - name: Install project dependencies
         working-directory: ${{ inputs.working_directory }}
@@ -284,25 +282,6 @@ jobs:
             exit 1
           fi
 
-      - name: Build Node assets
-        if: ${{ steps.node.outputs.enabled == 'true' }}
-        working-directory: ${{ inputs.working_directory }}
-        shell: bash
-        env:
-          BUILD_SCRIPT: ${{ inputs.build_script }}
-        run: |
-          set -euo pipefail
-          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
-            if [ -f pnpm-lock.yaml ]; then
-              pnpm run "$BUILD_SCRIPT"
-            elif [ -f yarn.lock ]; then
-              yarn "$BUILD_SCRIPT"
-            else
-              npm run "$BUILD_SCRIPT"
-            fi
-          fi
-
       - name: Install deployment dependencies
         working-directory: ${{ inputs.deployment_directory }}
         shell: bash
@@ -327,13 +306,223 @@ jobs:
             export GIT_SSH_COMMAND="ssh -i $auth_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$auth_dir/known_hosts"
           fi
           test -f composer.lock
-          composer validate --strict --no-check-publish
+          composer --no-plugins validate --strict --no-check-publish
           composer install --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts --no-plugins
+
+      - name: Package dependencies artifact
+        shell: bash
+        env:
+          ARTIFACT_KIND: dependencies
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          kind = os.environ['ARTIFACT_KIND']
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / (kind + '.tgz')
+          excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
+          if kind == 'release':
+              excluded.add('node_modules')
+          def safe(info):
+              parts = pathlib.PurePosixPath(info.name).parts
+              if any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts):
+                  return None
+              if info.issym() or info.islnk():
+                  raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
+              if not (info.isfile() or info.isdir()):
+                  raise RuntimeError('Unsupported deployment artifact entry: ' + info.name)
+              return info
+          metadata = root / '.sympress-artifact.json'
+          metadata.write_text(json.dumps({'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}))
+          for path in root.rglob('*'):
+              if path.is_symlink():
+                  resolved = path.resolve(strict=True)
+                  if not resolved.is_relative_to(root):
+                      raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
+          with tarfile.open(target, 'w:gz', dereference=True) as archive:
+              archive.add(root, arcname='.', filter=safe)
+          PY
+
+      - name: Upload dependencies artifact
+        id: artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sympress-deploy-dependencies-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dependencies.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build without deployment secrets
+    needs: dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+    env:
+      COMPOSER_NO_DEV: 1
+    steps:
+      - name: Download dependencies artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.dependencies.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-dependencies
+
+      - name: Restore dependencies artifact
+        shell: bash
+        env:
+          ARTIFACT_KIND: dependencies
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          kind = os.environ['ARTIFACT_KIND']
+          source = pathlib.Path(os.environ['RUNNER_TEMP']) / ('sympress-' + kind) / (kind + '.tgz')
+          with tarfile.open(source) as archive:
+              archive.extractall(root, filter='data')
+          metadata = json.loads((root / '.sympress-artifact.json').read_text())
+          assert metadata == {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}, 'Artifact provenance mismatch'
+          PY
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Detect package.json
+        id: node
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          test -f "$WD/package.json" && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Build Node assets
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          set -euo pipefail
+          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm run "$BUILD_SCRIPT"
+            elif [ -f yarn.lock ]; then
+              yarn "$BUILD_SCRIPT"
+            else
+              npm run "$BUILD_SCRIPT"
+            fi
+          fi
+
+      - name: Package release artifact
+        shell: bash
+        env:
+          ARTIFACT_KIND: release
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          kind = os.environ['ARTIFACT_KIND']
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / (kind + '.tgz')
+          excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
+          if kind == 'release':
+              excluded.add('node_modules')
+          def safe(info):
+              parts = pathlib.PurePosixPath(info.name).parts
+              if any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts):
+                  return None
+              if info.issym() or info.islnk():
+                  raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
+              if not (info.isfile() or info.isdir()):
+                  raise RuntimeError('Unsupported deployment artifact entry: ' + info.name)
+              return info
+          metadata = root / '.sympress-artifact.json'
+          metadata.write_text(json.dumps({'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}))
+          for path in root.rglob('*'):
+              if path.is_symlink():
+                  resolved = path.resolve(strict=True)
+                  if not resolved.is_relative_to(root):
+                      raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
+          with tarfile.open(target, 'w:gz', dereference=True) as archive:
+              archive.add(root, arcname='.', filter=safe)
+          PY
+
+      - name: Upload release artifact
+        id: artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sympress-deploy-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ github.repository }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    outputs:
+      deploy_exit_code: ${{ steps.run-deployer.outputs.exit_code }}
+      deploy_reason: ${{ steps.run-deployer.outputs.reason }}
+      deploy_warnings: ${{ steps.run-deployer.outputs.warnings }}
+      deploy_log_excerpt: ${{ steps.run-deployer.outputs.log_excerpt }}
+    env:
+      COMPOSER_NO_DEV: 1
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-release
+
+      - name: Restore release artifact
+        shell: bash
+        env:
+          ARTIFACT_KIND: release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          kind = os.environ['ARTIFACT_KIND']
+          source = pathlib.Path(os.environ['RUNNER_TEMP']) / ('sympress-' + kind) / (kind + '.tgz')
+          with tarfile.open(source) as archive:
+              archive.extractall(root, filter='data')
+          metadata = json.loads((root / '.sympress-artifact.json').read_text())
+          assert metadata == {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}, 'Artifact provenance mismatch'
+          PY
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, ${{ inputs.php_tools }}
+          coverage: none
 
       - name: Install WireGuard tooling
         env:
           WIREGUARD_ENABLED: ${{ secrets.WIREGUARD_CONFIGURATION != '' }}
-        if: ${{ env.WIREGUARD_ENABLED == 'true' }}
+        if: ${{ inputs.use_ssh && (env.WIREGUARD_ENABLED == 'true') }}
         run: |
           if ! command -v wg-quick >/dev/null 2>&1; then
             sudo apt-get update
@@ -341,14 +530,17 @@ jobs:
           fi
 
       - name: Configure SSH known hosts
+        if: ${{ inputs.use_ssh }}
         env:
           DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           ALLOW_SSH_KEYSCAN: ${{ inputs.allow_ssh_keyscan }}
         run: |
           set -euo pipefail
           umask 077
+          test -n "$DEPLOY_SSH_KEY" || { echo "::error::Deployment SSH key required when use_ssh is true."; exit 1; }
           mkdir -p ~/.ssh
           test -n "$SSH_KNOWN_HOSTS" || { echo "::error::Verified SSH_KNOWN_HOSTS required for deployment."; exit 1; }
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
@@ -360,6 +552,7 @@ jobs:
           printf '%s\n' 'StrictHostKeyChecking yes' > ~/.ssh/config
 
       - name: Set up SSH
+        if: ${{ inputs.use_ssh }}
         uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ secrets.GITHUB_USER_SSH_KEY }}
@@ -367,7 +560,7 @@ jobs:
       - name: Set up WireGuard
         env:
           WIREGUARD_CONFIGURATION: ${{ secrets.WIREGUARD_CONFIGURATION }}
-        if: ${{ env.WIREGUARD_CONFIGURATION != '' }}
+        if: ${{ inputs.use_ssh && (env.WIREGUARD_CONFIGURATION != '') }}
         run: |
           umask 077
           config_file="$(mktemp)"
