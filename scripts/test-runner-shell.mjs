@@ -134,11 +134,11 @@ if arguments[:3] != ['exec', '--raw', '--']:
 mount = os.environ['RUNNER_TEMP'] + '/sympress-install-auth'
 arguments = [value.replace('/run/sympress-install-auth', mount) for value in arguments]
 environment = dict(os.environ)
-for name in ['COMPOSER_AUTH', 'NPM_TOKEN', 'NODE_AUTH_TOKEN', 'SSH_KEY', 'SSH_AUTH_SOCK']:
+for name in ['COMPOSER_UPDATE', 'COMPOSER_AUTH', 'NPM_TOKEN', 'NODE_AUTH_TOKEN', 'SSH_KEY', 'SSH_AUTH_SOCK']:
     environment.pop(name, None)
 if arguments[3] == 'bash':
     script = pathlib.Path(arguments[4]).read_text().replace('/run/sympress-install-auth', mount)
-    result = subprocess.run(['bash', '-c', 'exec "$@"', 'ddev-outer-shell', 'bash', '-s'], input=script, text=True, env=environment)
+    result = subprocess.run(['bash', '-c', 'exec "$@"', 'ddev-outer-shell', 'bash', '-s', '--', *arguments[5:]], input=script, text=True, env=environment)
 elif arguments[3] == 'find':
     result = subprocess.run(arguments[3:], env=environment)
 elif arguments[3] == 'php':
@@ -148,10 +148,13 @@ else:
 sys.exit(result.returncode)
 `, { mode: 0o700 });
   executable(path.join(root, 'fake-bin/composer'), `
+set -euo pipefail
 test "\${COMPOSER_AUTH:-}" = "$EXPECTED_AUTH" || exit 92
+printf '%s\\n' "$1" >> ddev-composer-actions
 case "$1" in
-  validate) test "$2" = --strict && test "$3" = --no-check-publish ;;
-  install) test "$2" = --no-interaction && test "$3" = --no-progress && test "$4" = --no-scripts && test "$5" = --no-plugins; exit "\${INSTALL_EXIT:-0}" ;;
+  validate) test "$*" = 'validate --strict --no-check-publish' ;;
+  install) test "$EXPECTED_ACTION" = install; test "$*" = 'install --no-interaction --no-progress --no-scripts --no-plugins'; exit "\${INSTALL_EXIT:-0}" ;;
+  update) test "$EXPECTED_ACTION" = update; test "$*" = 'update --with-all-dependencies --no-interaction --no-progress --no-scripts --no-plugins'; exit "\${INSTALL_EXIT:-0}" ;;
   *) exit 93 ;;
 esac`);
   executable(path.join(root, 'fake-bin/npm'), 'test "$1" = ci && test "$2" = --ignore-scripts');
@@ -160,13 +163,17 @@ esac`);
   const ddevInstall = step('ddev-playwright.yml', 'Install dependencies with private authentication');
   const ddevVerify = step('ddev-playwright.yml', 'Verify install credentials removed');
   const secret = JSON.stringify({ token: 'nested-ddev-secret-canary$(touch injected-auth)"`literal`' });
-  for (const [auth, code] of [['', 0], [secret, 0], [secret, 7]]) {
+  for (const [mode, auth, code] of [[undefined, '', 0], ['false', secret, 0], ['false', secret, 7], ['true', '', 0], ['true', secret, 0], ['true', secret, 7]]) {
+    const action = mode === 'true' ? 'update' : 'install';
     const environment = { ...gateEnvironment, COMPOSER_AUTH: auth, EXPECTED_AUTH: auth,
+      EXPECTED_ACTION: action, ...(mode === undefined ? {} : { COMPOSER_UPDATE: mode }),
       NPM_TOKEN: auth ? 'nested-ddev-secret-canary' : '', SSH_KEY: '', SSH_KNOWN_HOSTS: '', INSTALL_EXIT: String(code) };
+    writeFileSync(path.join(root, 'ddev-composer-actions'), '');
     const result = run(ddevInstall.run, environment);
     assert.equal(result.status, code, result.stderr);
     assert.doesNotMatch(result.stdout + result.stderr + readFileSync(path.join(root, 'ddev-arguments'), 'utf8'), /nested-ddev-secret-canary/);
-    assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'ddev-arguments'), 'utf8')), ['exec', '--raw', '--', 'bash', '/run/sympress-install-auth/install.sh']);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'ddev-arguments'), 'utf8')), ['exec', '--raw', '--', 'bash', '/run/sympress-install-auth/install.sh', mode ?? 'false']);
+    assert.deepEqual(readFileSync(path.join(root, 'ddev-composer-actions'), 'utf8').trim().split('\n'), ['validate', action]);
     assert.deepEqual(readdirSync(path.join(root, 'sympress-install-auth')), []);
     assert.equal(existsSync(path.join(root, 'injected-auth')), false);
     assert.equal(existsSync(path.join(root, 'sympress-install-auth/auth.json')), false);
@@ -174,12 +181,25 @@ esac`);
     assert.equal(run(ddevVerify.run, environment).status, 0);
     checks++;
   }
-  rmSync(path.join(root, 'composer.lock'));
-  assert.equal(run(ddevInstall.run, { ...gateEnvironment, COMPOSER_AUTH: '', EXPECTED_AUTH: '', NPM_TOKEN: '', SSH_KEY: '', SSH_KNOWN_HOSTS: '' }).status, 1);
+  writeFileSync(path.join(root, 'ddev-composer-actions'), '');
+  const invalidUpdate = run(ddevInstall.run, { ...gateEnvironment, COMPOSER_UPDATE: '$(touch injected-mode)',
+    COMPOSER_AUTH: secret, EXPECTED_AUTH: secret, NPM_TOKEN: '', SSH_KEY: '', SSH_KNOWN_HOSTS: '' });
+  assert.equal(invalidUpdate.status, 1, invalidUpdate.stderr);
+  assert.equal(readFileSync(path.join(root, 'ddev-composer-actions'), 'utf8'), '');
+  assert.equal(existsSync(path.join(root, 'injected-mode')), false);
+  assert.deepEqual(readdirSync(path.join(root, 'sympress-install-auth')), []);
+  assert.doesNotMatch(invalidUpdate.stdout + invalidUpdate.stderr, /nested-ddev-secret-canary/);
   checks++;
+  rmSync(path.join(root, 'composer.lock'));
+  for (const mode of ['false', 'true']) {
+    assert.equal(run(ddevInstall.run, { ...gateEnvironment, COMPOSER_UPDATE: mode, COMPOSER_AUTH: '', EXPECTED_AUTH: '', NPM_TOKEN: '', SSH_KEY: '', SSH_KNOWN_HOSTS: '' }).status, 1);
+    assert.equal(readFileSync(path.join(root, 'ddev-composer-actions'), 'utf8'), '');
+    assert.deepEqual(readdirSync(path.join(root, 'sympress-install-auth')), []);
+    checks++;
+  }
   writeFileSync(path.join(root, 'composer.lock'), '{}');
   rmSync(path.join(root, 'package-lock.json'));
-  assert.equal(run(ddevInstall.run, { ...gateEnvironment, COMPOSER_AUTH: '', EXPECTED_AUTH: '', NPM_TOKEN: '', SSH_KEY: '', SSH_KNOWN_HOSTS: '' }).status, 1);
+  assert.equal(run(ddevInstall.run, { ...gateEnvironment, COMPOSER_AUTH: '', EXPECTED_AUTH: '', EXPECTED_ACTION: 'install', NPM_TOKEN: '', SSH_KEY: '', SSH_KNOWN_HOSTS: '' }).status, 1);
   writeFileSync(path.join(root, 'sympress-install-auth/unexpected'), 'residual');
   assert.equal(run(ddevVerify.run, gateEnvironment).status, 1);
   rmSync(path.join(root, 'sympress-install-auth/unexpected'));
