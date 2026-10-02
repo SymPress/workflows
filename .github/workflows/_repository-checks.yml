@@ -82,6 +82,21 @@ jobs:
       - name: Validate contracts
         run: npm run test:contracts
 
+      - name: Audit repository dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Audit release tooling dependencies
+        run: npm audit --prefix templates/automatic-release --audit-level=moderate
+
+      - name: Exercise runner shell failure paths
+        run: npm run test:shell
+
+      - name: Exercise canary incident lifecycle
+        run: npm run test:canary
+
+      - name: Exercise locked release tooling
+        run: npm run test:release
+
       - name: Verify generated workflow interfaces
         run: npm run check:interfaces
 
@@ -106,7 +121,6 @@ jobs:
       include_root: false
       package_glob: fixtures/monorepo/packages/*
       run_audit: false
-      run_phpunit: false
 
   fixture-archive:
     name: Fixture WordPress archive

@@ -1,0 +1,85 @@
+name: Dependency compatibility canary
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version used for the current stable dependency resolution.
+        type: string
+        default: '8.5'
+      php_extensions:
+        description: Additional PHP extensions required by the package tests.
+        type: string
+        default: ''
+      run_node_build:
+        description: Also build the committed Node dependency lock.
+        type: boolean
+        default: false
+    secrets:
+      COMPOSER_AUTH_JSON:
+        description: Optional read-only Composer authentication for private dependencies.
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-compatibility-canary
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sympress-qa.yml
+    with:
+      php_version: ${{ inputs.php_version }}
+      php_extensions: ${{ inputs.php_extensions }}
+      update_dependencies: true
+      run_node_build: ${{ inputs.run_node_build }}
+    secrets:
+      COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
+
+  incident:
+    if: ${{ always() }}
+    needs: qa
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Notify on compatibility failure or recovery
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          CANARY_RESULT: ${{ needs.qa.result }}
+        with:
+          script: |
+            const marker = '<!-- sympress-dependency-compatibility -->';
+            const title = 'Scheduled dependency compatibility failed';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const result = process.env.CANARY_RESULT;
+            if (!['success', 'failure', 'cancelled'].includes(result)) {
+              core.setFailed(`Compatibility check did not run: ${result}`);
+              return;
+            }
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'all', creator: 'github-actions[bot]', per_page: 100,
+            });
+            const incident = issues.find(issue => !issue.pull_request && (issue.body || '').includes(marker));
+            if (result === 'success') {
+              if (incident?.state === 'open') {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number: incident.number,
+                  body: `The compatibility check recovered. [Successful run](${run}).`,
+                });
+                await github.rest.issues.update({ ...context.repo, issue_number: incident.number, state: 'closed' });
+              }
+              return;
+            }
+            const body = `${marker}\n\nCurrent permitted dependencies failed the required QA/audit gates (${result}). [Inspect the run](${run}) before updating package constraints or locks.`;
+            if (!incident) {
+              await github.rest.issues.create({ ...context.repo, title, body });
+            } else if (incident.state === 'closed') {
+              await github.rest.issues.update({ ...context.repo, issue_number: incident.number, state: 'open', body });
+            }

@@ -8,16 +8,24 @@ This guide is for people changing this repository.
 npm ci
 ```
 
+Install the pinned native actionlint release used by `_repository-checks.yml`
+and make it available on `PATH`. The npm package named `actionlint` exposes a WASM
+API and does not provide the CLI invoked by `lint:workflows`.
+
 Run all repository checks:
 
 ```bash
 npm run test:contracts
+npm run test:shell
+npm run test:canary
+npm run test:release
 npm run check:interfaces
 npm run lint:workflows
 npm run lint:docs
 npm run doctor:repo
 npm run doctor -- --fail-on high fixtures/wp-plugin
 npm audit --audit-level=moderate
+npm audit --prefix templates/automatic-release --audit-level=moderate
 ```
 
 ## Repository Layout

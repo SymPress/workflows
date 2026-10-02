@@ -74,27 +74,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          token: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
-
-      - name: Configure SSH
-        env:
-          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
-        if: ${{ env.SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
-        with:
-          ssh-private-key: ${{ env.SSH_KEY }}
-
-      - name: Configure SSH remote
-        env:
-          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
-        if: ${{ env.SSH_KEY != '' }}
-        run: git remote set-url origin "git@github.com:${{ github.repository }}.git"
-
-      - name: Configure HTTPS remote
-        env:
-          PUSH_TOKEN: ${{ secrets.GITHUB_USER_TOKEN }}
-        if: ${{ env.PUSH_TOKEN != '' }}
-        run: git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
 
       - name: Configure Git author
         shell: bash
@@ -105,17 +84,6 @@ jobs:
           set -euo pipefail
           git config user.email "${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
           git config user.name "${GIT_NAME:-github-actions[bot]}"
-
-      - name: Configure SSH commit signing
-        env:
-          SSH_PUBLIC_KEY: ${{ secrets.GITHUB_USER_SSH_PUBLIC_KEY }}
-        if: ${{ env.SSH_PUBLIC_KEY != '' }}
-        run: |
-          touch "${{ runner.temp }}/signingkey"
-          printf '%s\n' "$SSH_PUBLIC_KEY" > "${{ runner.temp }}/signingkey.pub"
-          git config commit.gpgsign true
-          git config gpg.format ssh
-          git config user.signingkey "${{ runner.temp }}/signingkey.pub"
 
       - name: Detect release config
         id: release-config
@@ -135,7 +103,6 @@ jobs:
           fi
 
       - name: Checkout workflow templates
-        if: ${{ steps.release-config.outputs.has_config == 'false' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.workflow_repository }}
@@ -153,32 +120,93 @@ jobs:
           mkdir -p .release
           cp .workflow-templates/templates/automatic-release/release.config.cjs "$RELEASE_CONFIG"
           cp .workflow-templates/templates/automatic-release/update-version.cjs .release/update-version.cjs
-          rm -rf .workflow-templates
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
 
-      - name: Install semantic-release
+      - name: Install locked release tooling
+        shell: bash
         run: |
-          npm install --no-save \
-            semantic-release@25.0.5 \
-            @semantic-release/changelog@6.0.3 \
-            @semantic-release/commit-analyzer@13.0.1 \
-            @semantic-release/exec@7.1.0 \
-            @semantic-release/git@10.0.1 \
-            @semantic-release/github@12.0.8 \
-            @semantic-release/npm@13.1.5 \
-            @semantic-release/release-notes-generator@14.1.1 \
-            conventional-changelog-conventionalcommits@9.3.1
+          set -euo pipefail
+          umask 077
+          tools_dir="${RUNNER_TEMP}/sympress-release-tools"
+          mkdir -p "$tools_dir"
+          cp .workflow-templates/templates/automatic-release/package{,-lock}.json "$tools_dir/"
+          cp .workflow-templates/templates/automatic-release/{run-release,github-auth-plugin}.mjs "$tools_dir/"
+          cp -R .workflow-templates/templates/automatic-release/disabled-npm-plugin "$tools_dir/"
+          npm ci --prefix "$tools_dir" --ignore-scripts --no-audit
+          rm -rf .workflow-templates
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Configure SSH remote
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ env.SSH_KEY != '' }}
+        run: git remote set-url origin "git@github.com:${{ github.repository }}.git"
+
+      - name: Configure SSH commit signing
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.GITHUB_USER_SSH_PUBLIC_KEY }}
+        if: ${{ env.SSH_PUBLIC_KEY != '' }}
+        run: |
+          umask 077
+          touch "${{ runner.temp }}/signingkey"
+          printf '%s\n' "$SSH_PUBLIC_KEY" > "${{ runner.temp }}/signingkey.pub"
+          git config commit.gpgsign true
+          git config gpg.format ssh
+          git config user.signingkey "${{ runner.temp }}/signingkey.pub"
 
       - name: Release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
+          SYMPRESS_RELEASE_TOKEN: ${{ secrets.GITHUB_USER_TOKEN || github.token }}
           NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
           RELEASE_CONFIG: ${{ inputs.release_config }}
-        run: npx semantic-release --ci --extends "./$RELEASE_CONFIG"
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          umask 077
+          helper="$(mktemp)"
+          trap 'rm -f "$helper"' EXIT
+          cat > "$helper" <<'HELPER'
+          #!/bin/sh
+          protocol= host=
+          while IFS='=' read -r name value; do
+            case "$name" in
+              protocol) protocol="$value" ;;
+              host) host="$value" ;;
+              '') break ;;
+            esac
+          done
+          if [ "$1" = get ] && [ "$protocol" = https ] && [ "$host" = github.com ]; then
+            printf 'username=x-access-token\npassword=%s\n' "$SYMPRESS_RELEASE_TOKEN"
+          fi
+          HELPER
+          chmod 700 "$helper"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0="$helper" GIT_TERMINAL_PROMPT=0
+          if [[ "$(git remote get-url origin)" != git@* ]]; then
+            git remote set-url origin "https://github.com/${REPOSITORY}.git"
+          fi
+          export NODE_PATH="${RUNNER_TEMP}/sympress-release-tools/node_modules"
+          node "${RUNNER_TEMP}/sympress-release-tools/run-release.mjs"
+
+      - name: Remove release credentials and tooling
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          ssh-add -D >/dev/null 2>&1 || true
+          if [ -n "${SSH_AGENT_PID:-}" ]; then
+            kill "$SSH_AGENT_PID" || true
+          fi
+          rm -f "${RUNNER_TEMP}/signingkey" "${RUNNER_TEMP}/signingkey.pub"
+          rm -rf "${RUNNER_TEMP}/sympress-release-tools" .workflow-templates

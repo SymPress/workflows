@@ -59,6 +59,21 @@ assert(
   fixtureMonorepoPackage.license,
   'fixtures/monorepo/packages/example/composer.json must include a license for strict Composer validation',
 );
+for (const tool of ['squizlabs/php_codesniffer', 'phpstan/phpstan', 'phpunit/phpunit']) {
+  assert(fixtureMonorepoPackage['require-dev']?.[tool], `Monorepo QA fixture must install ${tool}`);
+}
+for (const file of ['phpcs.xml.dist', 'phpstan.neon.dist', 'phpunit.xml.dist', 'src/Example.php', 'tests/ExampleTest.php']) {
+  assert(existsSync(path.join(root, 'fixtures/monorepo/packages/example', file)), `Monorepo QA fixture must include ${file}`);
+}
+assert(
+  fixtureMonorepoPackage.autoload?.['psr-4']?.['Sympress\\Fixture\\Monorepo\\'] === 'src/',
+  'Monorepo QA fixture must autoload its actual tested source',
+);
+const monorepoCaller = parseDocument(read('.github/workflows/_repository-checks.yml')).toJS().jobs['fixture-monorepo-qa'];
+for (const gate of ['run_validate', 'run_phpcs', 'run_phpstan', 'run_phpunit']) {
+  const defaultEnabled = parseDocument(read('.github/workflows/sympress-qa.yml')).toJS().on.workflow_call.inputs[gate].default;
+  assert((monorepoCaller.with?.[gate] ?? defaultEnabled) === true, `Monorepo QA fixture must enable ${gate}`);
+}
 
 for (const file of workflowFiles) {
   assert(catalogWorkflowFiles.has(file), `workflow-catalog.json must include ${file}`);
@@ -209,19 +224,27 @@ for (const [file, gate] of [
 }
 
 const sympressQa = read('.github/workflows/sympress-qa.yml');
+const dependencyCanary = parseDocument(read('.github/workflows/dependency-canary.yml')).toJS();
+assert(dependencyCanary.jobs.qa.with.update_dependencies === true, 'dependency canary must resolve current permitted dependencies');
+assert(dependencyCanary.jobs.qa.permissions.contents === 'read' && !dependencyCanary.jobs.qa.permissions.issues, 'canary build must not receive issue write permission');
+assert(dependencyCanary.jobs.incident.permissions.issues === 'write', 'canary incident job must receive issue write permission');
+assert(dependencyCanary.jobs.incident.steps.length === 1 && !dependencyCanary.jobs.incident.steps[0].run, 'incident notification must not install or execute project code');
+assert(sympressQa.includes('UPDATE_DEPENDENCIES: ${{ inputs.update_dependencies }}'), 'current dependency resolution must be opt-in through an environment variable');
 assert(sympressQa.includes('strategy:'), 'sympress-qa.yml must use a matrix strategy');
 assert(sympressQa.includes('matrix:'), 'sympress-qa.yml must define a target matrix');
 assert(!sympressQa.includes('for target in "${targets[@]}"'), 'sympress-qa.yml must not run targets serially');
-assert(sympressQa.includes('--ignore=vendor/*,node_modules/*'), 'sympress-qa.yml PHPCS fallback must ignore dependencies');
+assert(!sympressQa.includes('--standard=PSR12'), 'sympress-qa.yml must require consumer PHPCS configuration');
+assert(sympressQa.includes('Required PHPCS executable is missing'), 'sympress-qa.yml must fail missing enabled tools');
+assert(sympressQa.includes('composer qa'), 'sympress-qa.yml must honor the complete consumer QA contract');
 for (const [flag, command] of [
   ['RUN_PHPCS', 'run_phpcs'],
   ['RUN_PHPSTAN', 'run_static_analysis'],
   ['RUN_PHPUNIT', 'run_phpunit'],
 ]) {
-  const block = `if [ "$${flag}" = "true" ]; then\n            ${command}\n          fi`;
+  const block = `if [ "$${flag}" = "true" ]; then\n              ${command}\n            fi`;
   assert(sympressQa.includes(block), `sympress-qa.yml must gate ${command} only with ${flag}`);
 }
-assert(!sympressQa.includes('has_script "qa"'), 'sympress-qa.yml must preserve its granular QA input flags');
+assert(sympressQa.includes('&& has_script "qa"'), 'sympress-qa.yml may run aggregate QA only when every gate is enabled');
 
 const deploy = read('.github/workflows/deploy-deployer.yml');
 assert(deploy.includes('environment: ${{ inputs.environment }}'), 'deploy-deployer.yml must bind GitHub environments');
@@ -229,11 +252,40 @@ assert(deploy.includes('SSH_KNOWN_HOSTS'), 'deploy-deployer.yml must support pin
 assert(deploy.includes('allow_ssh_keyscan'), 'deploy-deployer.yml must gate ssh-keyscan fallback');
 
 const release = read('.github/workflows/automatic-release.yml');
-assert(release.includes('semantic-release@25.0.5'), 'automatic-release.yml must pin semantic-release');
-assert(release.includes('conventional-changelog-conventionalcommits@9.3.1'), 'automatic-release.yml must pin release dependencies');
+const releaseManifest = JSON.parse(read('templates/automatic-release/package.json'));
+const releaseLock = JSON.parse(read('templates/automatic-release/package-lock.json'));
+assert(releaseManifest.overrides['@semantic-release/npm'] === '$@sympress/release-disabled-npm-plugin', 'unused npm publication engine must be replaced by explicit local guard');
+assert(!releaseLock.packages['node_modules/npm'], 'release tooling must not install unused vulnerable bundled npm');
+assert(!read('templates/automatic-release/release.config.cjs').includes('@semantic-release/npm'), 'fallback release config must only use supported release plugins');
+assert(releaseManifest.dependencies['semantic-release'] === '25.0.5', 'locked release tooling must pin semantic-release');
+assert(releaseLock.packages['node_modules/semantic-release'].version === '25.0.5', 'release lock must pin transitive tooling');
+assert(release.includes('npm ci --prefix "$tools_dir" --ignore-scripts'), 'release tools must be installed locked without lifecycle scripts');
+assert(!release.includes('x-access-token:${'), 'release PAT must not be embedded into a Git URL');
+assert(release.includes('GIT_CONFIG_KEY_0=credential.helper'), 'release Git auth must be ephemeral');
+assert(read('templates/automatic-release/run-release.mjs').includes('gitEnvironment(process.env)'), 'release core must not receive Git credential token variables');
 assert(release.includes('concurrency:'), 'automatic-release.yml must serialize release runs');
 assert(!release.includes('default: main'), 'automatic-release.yml fallback workflow_ref must not default to main');
 assert(release.includes('RELEASE_CONFIG: ${{ inputs.release_config }}'), 'automatic-release.yml must pass release_config through env');
+
+const deployWorkflow = parseDocument(deploy).toJS();
+const deploySteps = deployWorkflow.jobs.deploy.steps;
+const namedStep = (steps, name) => steps.find(step => step.name === name);
+const stepPosition = (steps, name) => steps.findIndex(step => step.name === name);
+assert(!deployWorkflow.jobs.deploy.env.NODE_AUTH_TOKEN, 'deploy token must not be job-wide');
+assert(stepPosition(deploySteps, 'Build Node assets') < stepPosition(deploySteps, 'Set up SSH'), 'production agent must load after builds');
+assert(namedStep(deploySteps, 'Run Deployer')['continue-on-error'] !== true, 'deploy preflight failure must fail naturally');
+assert(namedStep(deploySteps, 'Fail on Deployer result').run.includes('OUTCOME'), 'deploy final guard must require successful outcome');
+assert(namedStep(deploySteps, 'Run Deployer').run.includes('statuses=("${PIPESTATUS[@]}")'), 'deploy must preserve deploy and tee exit statuses');
+for (const name of ['Install project dependencies', 'Install deployment dependencies']) {
+  assert(namedStep(deploySteps, name).run.includes('--no-scripts --no-plugins'), 'Composer fetch must not execute code with credentials');
+}
+assert(namedStep(deploySteps, 'Install deployment dependencies').run.includes('test -f composer.lock'), 'deployment tooling must require a lock');
+const releaseSteps = parseDocument(release).toJS().jobs['automatic-release'].steps;
+assert(stepPosition(releaseSteps, 'Install locked release tooling') < stepPosition(releaseSteps, 'Configure SSH'), 'release tooling must install before SSH auth');
+const ddevSteps = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS().jobs['ddev-playwright'].steps;
+assert(stepPosition(ddevSteps, 'Verify install credentials removed') < stepPosition(ddevSteps, 'Run setup command'), 'DDEV setup must run after credentials disappear');
+assert(!read('.github/workflows/ddev-playwright.yml').includes('accept-new'), 'DDEV cannot auto-trust host keys');
+assert(read('.github/workflows/ddev-playwright.yml').includes(':ro'), 'DDEV auth must use a private read-only mount');
 
 const qit = read('.github/workflows/woo-qit.yml');
 assert(qit.includes('2745b88fb76608cd4a5d0e12d8ec4a7609a1a326'), 'woo-qit.yml must pin the default QIT ref');

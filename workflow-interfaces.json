@@ -438,6 +438,34 @@
       }
     },
     {
+      "id": "dependency-canary",
+      "file": ".github/workflows/dependency-canary.yml",
+      "inputs": {
+        "php_version": {
+          "description": "PHP version used for the current stable dependency resolution.",
+          "type": "string",
+          "default": "8.5"
+        },
+        "php_extensions": {
+          "description": "Additional PHP extensions required by the package tests.",
+          "type": "string",
+          "default": ""
+        },
+        "run_node_build": {
+          "description": "Also build the committed Node dependency lock.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "secrets": {
+        "COMPOSER_AUTH_JSON": {
+          "description": "Optional read-only Composer authentication for private dependencies.",
+          "required": false
+        }
+      },
+      "outputs": {}
+    },
+    {
       "id": "codeql",
       "file": ".github/workflows/codeql.yml",
       "inputs": {
@@ -567,7 +595,7 @@
         "playwright_install_command": {
           "description": "Command that installs Playwright dependencies.",
           "type": "string",
-          "default": "ddev exec bash -lc \"if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else echo 'No JavaScript lockfile found.'; exit 1; fi\" && npx playwright install --with-deps",
+          "default": "npx --no-install playwright install --with-deps",
           "required": false
         },
         "playwright_run_command": {
@@ -761,8 +789,16 @@
           "description": "Composer authentication JSON.",
           "required": false
         },
+        "INSTALL_SSH_KEY": {
+          "description": "Separate read-only SSH key for fetching private Composer dependencies.",
+          "required": false
+        },
+        "INSTALL_SSH_KNOWN_HOSTS": {
+          "description": "Verified host keys for private dependency fetches.",
+          "required": false
+        },
         "GITHUB_USER_SSH_KEY": {
-          "description": "SSH key used for deployment targets and private dependencies.",
+          "description": "SSH key used only for deployment targets.",
           "required": true
         },
         "DEPLOY_HOSTNAME": {
@@ -1465,6 +1501,12 @@
           "description": "Options passed to Composer install.",
           "type": "string",
           "default": "--prefer-dist --no-progress --no-interaction",
+          "required": false
+        },
+        "update_dependencies": {
+          "description": "Resolve current permitted dependency versions before QA; use for scheduled compatibility checks.",
+          "type": "boolean",
+          "default": false,
           "required": false
         },
         "run_validate": {

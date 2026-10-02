@@ -95,6 +95,8 @@ Workflow calls are made at job level with `jobs.<job_id>.uses`. See
 
 - [SymPress QA](docs/sympress-qa.md) for Composer projects and package
   monorepos.
+- [Dependency canary](docs/dependency-canary.md) for scheduled dependency
+  checks and failure/recovery notifications.
 - [Decision guide](docs/decision-guide.md) for choosing the smallest useful
   workflow.
 - [Feature map](docs/feature-map.md) for the complete workflow coverage.

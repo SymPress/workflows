@@ -42,3 +42,20 @@ updates:
         dependency-type: development
         patterns:
           - '*'
+
+  - package-ecosystem: npm
+    directory: /templates/automatic-release
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - npm
+    commit-message:
+      prefix: chore
+      include: scope

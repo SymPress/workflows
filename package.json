@@ -11,7 +11,10 @@
     "lint:docs": "markdownlint-cli2 AGENTS.md README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md SUPPORT.md docs/**/*.md .github/**/*.md",
     "lint:workflows": "actionlint",
     "test:consumers": "node scripts/validate-consumers.mjs",
-    "test:contracts": "node scripts/validate-contracts.mjs"
+    "test:contracts": "node scripts/validate-contracts.mjs",
+    "test:shell": "node scripts/test-runner-shell.mjs",
+    "test:canary": "node scripts/test-canary-notification.mjs",
+    "test:release": "node scripts/test-release-tooling.mjs"
   },
   "devDependencies": {
     "actionlint": "^2.0.6",

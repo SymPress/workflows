@@ -68,6 +68,8 @@ jobs:
       contents: read
       checks: write
       pull-requests: read
+    env:
+      CI: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -168,6 +170,11 @@ jobs:
 
           if [ ! -x "$phpcs_bin" ]; then
             echo "PHPCS binary not found at $phpcs_bin."
+            exit 1
+          fi
+
+          if [ ! -f phpcs.xml ] && [ ! -f phpcs.xml.dist ]; then
+            echo "::error::Required PHPCS configuration is missing."
             exit 1
           fi
 

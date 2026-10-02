@@ -35,6 +35,14 @@
       "summary": "Build a compiled branch and upload a guarded package artifact with manifest, secret scanning, and optional attestation."
     },
     {
+      "id": "dependency-canary",
+      "file": ".github/workflows/dependency-canary.yml",
+      "category": "quality",
+      "permissions": "issues write",
+      "trust": "scheduled default-branch checks",
+      "summary": "Resolve current stable Composer dependencies, run full QA and audit, and notify once per failure or recovery."
+    },
+    {
       "id": "codeql",
       "file": ".github/workflows/codeql.yml",
       "category": "security",

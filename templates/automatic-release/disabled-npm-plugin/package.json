@@ -1,0 +1,8 @@
+{
+  "name": "@sympress/release-disabled-npm-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "description": "Explicit guard replacing unused npm publication plugin in the GitHub-only release toolchain."
+}

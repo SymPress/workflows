@@ -13,8 +13,11 @@ jobs:
 ```
 
 The workflow discovers Composer packages, fans them out as a matrix, installs
-dependencies, and runs enabled checks when each package has matching scripts or
-config files.
+dependencies, and runs enabled checks. Every enabled gate requires its tool and
+consumer configuration; missing prerequisites fail. The job sets `CI=true`, so
+SymPress QA commands are strict without a separate `--strict` argument. A package
+`composer qa` script is used when all three code/test gates are enabled; individual
+input switches remain authoritative when any gate is explicitly disabled.
 
 Recognized Composer scripts:
 
@@ -33,6 +36,7 @@ Useful inputs:
 | --- | --- | --- |
 | `include_root` | `true` | Run the root `composer.json` when present. |
 | `package_glob` | `packages/*` | Composer package discovery glob. |
+| `update_dependencies` | `false` | Resolve current permitted Composer dependencies before QA. |
 | `run_validate` | `true` | Run `composer validate`. |
 | `run_audit` | `true` | Run `composer audit`. |
 | `run_phpcs` | `true` | Run PHPCS or coding standards scripts. |

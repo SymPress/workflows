@@ -81,8 +81,14 @@ on:
       COMPOSER_AUTH_JSON:
         description: Composer authentication JSON.
         required: false
+      INSTALL_SSH_KEY:
+        description: Separate read-only SSH key for fetching private Composer dependencies.
+        required: false
+      INSTALL_SSH_KNOWN_HOSTS:
+        description: Verified host keys for private dependency fetches.
+        required: false
       GITHUB_USER_SSH_KEY:
-        description: SSH key used for deployment targets and private dependencies.
+        description: SSH key used only for deployment targets.
         required: true
       DEPLOY_HOSTNAME:
         description: Host added to known_hosts before deployment.
@@ -135,7 +141,6 @@ jobs:
       deploy_log_excerpt: ${{ steps.run-deployer.outputs.log_excerpt }}
     env:
       COMPOSER_NO_DEV: 1
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
       ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
     steps:
       - name: Checkout
@@ -143,24 +148,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.GITHUB_USER_SSH_KEY }}
-
-      - name: Set up WireGuard
-        env:
-          WIREGUARD_CONFIGURATION: ${{ secrets.WIREGUARD_CONFIGURATION }}
-        if: ${{ env.WIREGUARD_CONFIGURATION != '' }}
-        run: |
-          if ! command -v wg-quick >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y wireguard-tools
-          fi
-          printf '%s\n' "$WIREGUARD_CONFIGURATION" | sudo tee /etc/wireguard/wg0.conf >/dev/null
-          sudo chmod 600 /etc/wireguard/wg0.conf
-          sudo wg-quick up wg0
 
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
@@ -172,15 +159,34 @@ jobs:
 
       - name: Validate Composer metadata
         working-directory: ${{ inputs.working_directory }}
-        run: composer validate --no-check-publish
+        run: |
+          test -f composer.lock
+          composer validate --strict --no-check-publish
 
       - name: Install project dependencies
-        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
         env:
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
-        with:
-          working-directory: ${{ inputs.working_directory }}
-          composer-options: --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction
+          INSTALL_SSH_KEY: ${{ secrets.INSTALL_SSH_KEY }}
+          INSTALL_SSH_KNOWN_HOSTS: ${{ secrets.INSTALL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_dir="$(mktemp -d)"
+          trap 'rm -rf "$auth_dir"' EXIT
+          if [ -n "$INSTALL_SSH_KEY" ]; then
+            test -n "$INSTALL_SSH_KNOWN_HOSTS" || { echo "::error::Verified install host keys required."; exit 1; }
+            printf '%s\n' "$INSTALL_SSH_KEY" > "$auth_dir/key"
+            printf '%s\n' "$INSTALL_SSH_KNOWN_HOSTS" > "$auth_dir/known_hosts"
+            while IFS= read -r host_key || [ -n "$host_key" ]; do
+              [[ "$host_key" =~ ^[[:space:]]*(#|$) ]] && continue
+              printf '%s\n' "$host_key" | ssh-keygen -l -f /dev/stdin >/dev/null
+            done < "$auth_dir/known_hosts"
+            ssh-keygen -l -f "$auth_dir/known_hosts" >/dev/null
+            export GIT_SSH_COMMAND="ssh -i $auth_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$auth_dir/known_hosts"
+          fi
+          composer install --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts --no-plugins
 
       - name: Detect package.json
         id: node
@@ -239,6 +245,45 @@ jobs:
           cache: ${{ steps.package-manager.outputs.cache }}
           cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
+      - name: Install Node dependencies
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
+          REGISTRY_URL: ${{ inputs.npm_registry_domain }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_file="$(mktemp)"
+          trap 'rm -f "$auth_file"' EXIT
+          export NPM_CONFIG_USERCONFIG="$auth_file"
+          # Retain the registry token placeholder for npm.
+          # shellcheck disable=SC2016
+          node -e 'const u=new URL(process.env.REGISTRY_URL); if(u.protocol!=="https:") process.exit(1); require("fs").writeFileSync(process.env.NPM_CONFIG_USERCONFIG, `registry=${u.href}\n//${u.host}${u.pathname}:_authToken=\${NODE_AUTH_TOKEN}\n`);'
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile --ignore-scripts
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            version="$(yarn --version)"
+            if [[ "$version" == 1.* ]]; then
+              yarn install --frozen-lockfile --ignore-scripts
+            elif [[ "$version" == 2.* ]]; then
+              YARN_NPM_AUTH_TOKEN="${NODE_AUTH_TOKEN:-${NPM_TOKEN:-}}" YARN_ENABLE_SCRIPTS=false yarn install --immutable --skip-builds
+            elif [[ "$version" =~ ^[3-9][0-9]*\. ]]; then
+              YARN_NPM_AUTH_TOKEN="${NODE_AUTH_TOKEN:-${NPM_TOKEN:-}}" YARN_ENABLE_SCRIPTS=false yarn install --immutable --mode=skip-build
+            else
+              echo "::error::Unsupported Yarn generation."
+              exit 1
+            fi
+          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci --ignore-scripts
+          else
+            echo "::error::No JavaScript lockfile found. Deployment requires frozen dependencies."
+            exit 1
+          fi
+
       - name: Build Node assets
         if: ${{ steps.node.outputs.enabled == 'true' }}
         working-directory: ${{ inputs.working_directory }}
@@ -247,25 +292,10 @@ jobs:
           BUILD_SCRIPT: ${{ inputs.build_script }}
         run: |
           set -euo pipefail
-          if [ -f pnpm-lock.yaml ]; then
-            corepack enable
-            pnpm install --frozen-lockfile
-          elif [ -f yarn.lock ]; then
-            corepack enable
-            yarn install --immutable || yarn install --frozen-lockfile
-          elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
-            npm ci
-          else
-            if [ "${ALLOW_UNPINNED_NODE_INSTALL:-false}" != "true" ]; then
-              echo "::error::No JavaScript lockfile found. Add pnpm-lock.yaml, yarn.lock, package-lock.json, or npm-shrinkwrap.json, or set allow_unpinned_node_install=true for trusted callers."
-              exit 1
-            fi
-            npm install
-          fi
-
+          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
           if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts[process.env.BUILD_SCRIPT] ? 0 : 1)"; then
             if [ -f pnpm-lock.yaml ]; then
-              pnpm "$BUILD_SCRIPT"
+              pnpm run "$BUILD_SCRIPT"
             elif [ -f yarn.lock ]; then
               yarn "$BUILD_SCRIPT"
             else
@@ -274,12 +304,41 @@ jobs:
           fi
 
       - name: Install deployment dependencies
-        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+        working-directory: ${{ inputs.deployment_directory }}
+        shell: bash
         env:
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
-        with:
-          working-directory: ${{ inputs.deployment_directory }}
-          composer-options: --prefer-dist --no-progress --no-interaction
+          INSTALL_SSH_KEY: ${{ secrets.INSTALL_SSH_KEY }}
+          INSTALL_SSH_KNOWN_HOSTS: ${{ secrets.INSTALL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_dir="$(mktemp -d)"
+          trap 'rm -rf "$auth_dir"' EXIT
+          if [ -n "$INSTALL_SSH_KEY" ]; then
+            test -n "$INSTALL_SSH_KNOWN_HOSTS" || { echo "::error::Verified install host keys required."; exit 1; }
+            printf '%s\n' "$INSTALL_SSH_KEY" > "$auth_dir/key"
+            printf '%s\n' "$INSTALL_SSH_KNOWN_HOSTS" > "$auth_dir/known_hosts"
+            while IFS= read -r host_key || [ -n "$host_key" ]; do
+              [[ "$host_key" =~ ^[[:space:]]*(#|$) ]] && continue
+              printf '%s\n' "$host_key" | ssh-keygen -l -f /dev/stdin >/dev/null
+            done < "$auth_dir/known_hosts"
+            ssh-keygen -l -f "$auth_dir/known_hosts" >/dev/null
+            export GIT_SSH_COMMAND="ssh -i $auth_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$auth_dir/known_hosts"
+          fi
+          test -f composer.lock
+          composer validate --strict --no-check-publish
+          composer install --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts --no-plugins
+
+      - name: Install WireGuard tooling
+        env:
+          WIREGUARD_ENABLED: ${{ secrets.WIREGUARD_CONFIGURATION != '' }}
+        if: ${{ env.WIREGUARD_ENABLED == 'true' }}
+        run: |
+          if ! command -v wg-quick >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y wireguard-tools
+          fi
 
       - name: Configure SSH known hosts
         env:
@@ -287,29 +346,39 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           ALLOW_SSH_KEYSCAN: ${{ inputs.allow_ssh_keyscan }}
-        if: ${{ env.DEPLOY_HOSTNAME != '' || env.SSH_KNOWN_HOSTS != '' }}
         run: |
           set -euo pipefail
+          umask 077
           mkdir -p ~/.ssh
-          touch ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          test -n "$SSH_KNOWN_HOSTS" || { echo "::error::Verified SSH_KNOWN_HOSTS required for deployment."; exit 1; }
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          while IFS= read -r host_key || [ -n "$host_key" ]; do
+            [[ "$host_key" =~ ^[[:space:]]*(#|$) ]] && continue
+            printf '%s\n' "$host_key" | ssh-keygen -l -f /dev/stdin >/dev/null
+          done < ~/.ssh/known_hosts
+          ssh-keygen -l -f ~/.ssh/known_hosts >/dev/null
+          printf '%s\n' 'StrictHostKeyChecking yes' > ~/.ssh/config
 
-          if [ -n "$SSH_KNOWN_HOSTS" ]; then
-            printf '%s\n' "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-            exit 0
-          fi
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.GITHUB_USER_SSH_KEY }}
 
-          if [ "$ALLOW_SSH_KEYSCAN" != "true" ]; then
-            echo "::error::SSH_KNOWN_HOSTS is required unless allow_ssh_keyscan=true is explicitly set."
-            exit 1
-          fi
-
-          port="${DEPLOY_PORT:-22}"
-          ssh-keyscan -p "$port" "$DEPLOY_HOSTNAME" >> ~/.ssh/known_hosts
+      - name: Set up WireGuard
+        env:
+          WIREGUARD_CONFIGURATION: ${{ secrets.WIREGUARD_CONFIGURATION }}
+        if: ${{ env.WIREGUARD_CONFIGURATION != '' }}
+        run: |
+          umask 077
+          config_file="$(mktemp)"
+          trap 'rm -f "$config_file"' EXIT
+          printf '%s\n' "$WIREGUARD_CONFIGURATION" > "$config_file"
+          sudo install -m 600 "$config_file" /etc/wireguard/wg0.conf
+          rm -f "$config_file"
+          sudo wg-quick up wg0
 
       - name: Run Deployer
         id: run-deployer
-        continue-on-error: true
         working-directory: ${{ inputs.deployment_directory }}
         shell: bash
         env:
@@ -322,51 +391,39 @@ jobs:
           ALLOW_CUSTOM_DEPLOY_COMMAND: ${{ inputs.allow_custom_deploy_command }}
         run: |
           set -euo pipefail
-          if [ "$DEPLOY_COMMAND" != "./vendor/bin/dep deploy" ] && [ "$ALLOW_CUSTOM_DEPLOY_COMMAND" != "true" ]; then
-            echo "::error::deploy_command is restricted by default. Set allow_custom_deploy_command=true only for trusted workflow calls."
-            exit 1
-          fi
-
-          if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
-            echo "::error::environment may only contain letters, numbers, dots, underscores, colons, and hyphens."
-            exit 1
-          fi
-
-          if [[ ! "$DEPLOY_VERBOSITY" =~ ^v{0,3}$ ]]; then
-            echo "::error::verbosity must be empty, v, vv, or vvv."
-            exit 1
-          fi
-
-          set +e
+          umask 077
           log_file="${RUNNER_TEMP}/deployer.log"
-          bash -lc "$DEPLOY_COMMAND $DEPLOY_ENVIRONMENT -$DEPLOY_VERBOSITY" 2>&1 | tee "$log_file"
-          exit_code="${PIPESTATUS[0]}"
-          set -e
-
-          warnings="$(grep -Ei '(^|[[:space:]])(warning|warn|deprecated|notice)(:|\\])' "$log_file" || true)"
-          if [ "$exit_code" -eq 0 ]; then
-            reason="Deployment completed successfully."
-          elif [ "$exit_code" -eq 2 ]; then
-            reason="$(printf '%s\n' "$warnings" | head -n 1)"
-            reason="${reason:-Deployment completed with warnings.}"
-          else
-            reason="$(grep -Ei '(^|[[:space:]])(error|critical|failed)(:|\\])' "$log_file" | head -n 1 || true)"
-            reason="${reason:-Deployment failed.}"
+          trap 'status=$?; rm -f "$log_file"; printf "exit_code=%s\n" "$status" >> "$GITHUB_OUTPUT"' EXIT
+          if [ "$DEPLOY_COMMAND" != "./vendor/bin/dep deploy" ] && [ "$ALLOW_CUSTOM_DEPLOY_COMMAND" != "true" ]; then
+            echo "::error::deploy_command is restricted by default."
+            exit 1
           fi
-
-          {
-            echo "exit_code=$exit_code"
-            echo "reason<<DEPLOY_REASON"
-            printf '%s\n' "$reason"
-            echo "DEPLOY_REASON"
-            echo "warnings<<DEPLOY_WARNINGS"
-            printf '%s\n' "$warnings" | head -n 40
-            echo "DEPLOY_WARNINGS"
-            echo "log_excerpt<<DEPLOY_LOG"
-            tail -n 120 "$log_file"
-            echo "DEPLOY_LOG"
-          } >> "$GITHUB_OUTPUT"
-
+          [[ "$DEPLOY_ENVIRONMENT" =~ ^[A-Za-z0-9_.:-]+$ ]] || { echo "::error::Invalid environment."; exit 1; }
+          [[ "$DEPLOY_VERBOSITY" =~ ^v{0,3}$ ]] || { echo "::error::Invalid verbosity."; exit 1; }
+          args=(./vendor/bin/dep deploy "$DEPLOY_ENVIRONMENT")
+          if [ -n "$DEPLOY_VERBOSITY" ]; then
+            args+=("-$DEPLOY_VERBOSITY")
+          fi
+          set +e
+          if [ "$DEPLOY_COMMAND" = "./vendor/bin/dep deploy" ]; then
+            "${args[@]}" 2>&1 | tee "$log_file"
+            statuses=("${PIPESTATUS[@]}")
+          else
+            bash -lc "$DEPLOY_COMMAND" -- "$DEPLOY_ENVIRONMENT" "$DEPLOY_VERBOSITY" 2>&1 | tee "$log_file"
+            statuses=("${PIPESTATUS[@]}")
+          fi
+          set -e
+          exit_code="${statuses[0]}"
+          if [ "$exit_code" -eq 0 ] && [ "${statuses[1]}" -ne 0 ]; then
+            exit_code="${statuses[1]}"
+          fi
+          if [ "$exit_code" -eq 0 ]; then
+            echo 'reason=Deployment completed successfully.' >> "$GITHUB_OUTPUT"
+          else
+            echo 'reason=Deployment failed; inspect the protected runner log.' >> "$GITHUB_OUTPUT"
+          fi
+          echo 'warnings=' >> "$GITHUB_OUTPUT"
+          echo 'log_excerpt=Raw deployment logs are restricted to the runner log.' >> "$GITHUB_OUTPUT"
           exit "$exit_code"
 
       - name: Stop WireGuard
@@ -374,14 +431,28 @@ jobs:
         run: |
           if [ -f /etc/wireguard/wg0.conf ]; then
             sudo wg-quick down wg0 || true
+            sudo rm -f /etc/wireguard/wg0.conf
           fi
 
+      - name: Remove deployment credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          ssh-add -D >/dev/null 2>&1 || true
+          if [ -n "${SSH_AGENT_PID:-}" ]; then
+            kill "$SSH_AGENT_PID" || true
+          fi
+          rm -f ~/.ssh/known_hosts ~/.ssh/config "${RUNNER_TEMP}/deployer.log" "${RUNNER_TEMP}/.npmrc"
+
       - name: Fail on Deployer result
-        if: ${{ always() && steps.run-deployer.outputs.exit_code != '' && steps.run-deployer.outputs.exit_code != '0' }}
+        if: ${{ always() }}
         shell: bash
         env:
+          OUTCOME: ${{ steps.run-deployer.outcome }}
           EXIT_CODE: ${{ steps.run-deployer.outputs.exit_code }}
-          DEPLOY_REASON: ${{ steps.run-deployer.outputs.reason }}
         run: |
-          echo "::error::${DEPLOY_REASON}"
-          exit "$EXIT_CODE"
+          set -euo pipefail
+          if [ "$OUTCOME" != 'success' ] || [[ ! "$EXIT_CODE" =~ ^[0-9]+$ ]] || [ "$EXIT_CODE" != '0' ]; then
+            echo "::error::Deployment did not produce a successful zero result."
+            exit 1
+          fi

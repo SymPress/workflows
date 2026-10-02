@@ -88,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
+      CI: true
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout
@@ -185,6 +186,10 @@ jobs:
             exit 0
           fi
 
+          if [ ! -f phpunit.xml ] && [ ! -f phpunit.xml.dist ]; then
+            echo "::error::Required PHPUnit configuration is missing."
+            exit 1
+          fi
           bin_dir="$(composer config bin-dir)"
           # shellcheck disable=SC2086
           "${bin_dir%/}/phpunit" $PHPUNIT_ARGS
