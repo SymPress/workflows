@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    uses: sympress/workflows/.github/workflows/dependency-canary.yml@REVIEWED_COMMIT_SHA
+    uses: sympress/workflows/.github/workflows/dependency-canary.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
     with:
       php_version: '8.5'
 ```
