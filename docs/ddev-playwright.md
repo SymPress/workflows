@@ -30,6 +30,16 @@ DDEV home additions or repository auth files. The workflow checks the host and
 container mount are empty before running project code and repeats cleanup before
 shutdown.
 
+Container installation reads a temporary literal script from the private mount
+with raw DDEV execution. The install trap also removes that script. Optional
+authentication is read inside the container; shell substitutions and secret
+values never enter the outer command arguments. Credential checks execute raw
+commands and fail if the mount contains files or an SSH agent socket is available.
+The temporary project configuration also omits DDEV's SSH agent, preserving
+other project omissions and leaving global DDEV settings unchanged. The unused
+default socket environment variable is cleared; verification also rejects a
+remaining socket file at DDEV's default path.
+
 The default browser install is `npx --no-install playwright install --with-deps`
 inside DDEV. Commit dependency lockfiles and install Playwright through the locked
 project dependencies. Any application initialization previously performed by
