@@ -261,6 +261,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
           REGISTRY_URL: ${{ inputs.npm_registry_domain }}
+          YARN_ENABLE_GLOBAL_CACHE: 'false'
         run: |
           set -euo pipefail
           umask 077
@@ -324,11 +325,12 @@ jobs:
         shell: bash
         env:
           ARTIFACT_KIND: dependencies
+          NODE_WORKING_DIRECTORY: ${{ inputs.working_directory }}
         run: |
           set -euo pipefail
           umask 077
           python3 - <<'PY'
-          import json, os, pathlib, tarfile
+          import io, json, os, pathlib, re, subprocess, tarfile
           root = pathlib.Path.cwd()
           kind = os.environ['ARTIFACT_KIND']
           target = pathlib.Path(os.environ['RUNNER_TEMP']) / (kind + '.tgz')
@@ -346,26 +348,74 @@ jobs:
               parts = pathlib.PurePosixPath(info.name).parts
               if private(parts):
                   return None
-              if info.isfile():
+              if info.isfile() or info.islnk() or (info.issym() and (root / info.name).is_file()):
                   stat = (root / info.name).stat()
                   if (stat.st_dev, stat.st_ino) in protected_inodes:
                       raise RuntimeError('Artifact alias reaches a private file: ' + info.name)
-              if info.issym() or info.islnk():
-                  raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
-              if not (info.isfile() or info.isdir()):
+              if info.issym():
+                  resolved = (root / info.name).resolve(strict=True)
+                  info.linkname = os.path.relpath(resolved, (root / info.name).parent)
+              elif info.islnk():
+                  resolved = (root / info.linkname).resolve(strict=True)
+                  if not resolved.is_relative_to(root) or private(resolved.relative_to(root).parts):
+                      raise RuntimeError('Artifact hardlink reaches a private or external file: ' + info.name)
+                  info.linkname = resolved.relative_to(root).as_posix()
+              if not (info.isfile() or info.isdir() or info.issym() or info.islnk()):
                   raise RuntimeError('Unsupported deployment artifact entry: ' + info.name)
               return info
           metadata = root / '.sympress-artifact.json'
+          if metadata.is_symlink() or (metadata.is_file() and metadata.stat().st_nlink > 1):
+              raise RuntimeError('Artifact metadata must not alias another file')
           metadata.write_text(json.dumps({'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}))
           for path in root.rglob('*'):
               if path.is_symlink():
+                  if pathlib.Path(os.readlink(path)).is_absolute():
+                      raise RuntimeError('Artifact link must be relative: ' + str(path.relative_to(root)))
                   resolved = path.resolve(strict=True)
                   if not resolved.is_relative_to(root):
                       raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
                   if not private(path.relative_to(root).parts) and private(resolved.relative_to(root).parts):
                       raise RuntimeError('Artifact link reaches a private file: ' + str(path.relative_to(root)))
-          with tarfile.open(target, 'w:gz', dereference=True) as archive:
+          yarn_config = None
+          working = (root / os.environ.get('NODE_WORKING_DIRECTORY', '.')).resolve(strict=True)
+          if not working.is_relative_to(root):
+              raise RuntimeError('Node working directory escapes workspace')
+          configs = [directory / '.yarnrc.yml' for directory in [working, *working.parents]
+                     if directory.is_relative_to(root) and (directory / '.yarnrc.yml').is_file()]
+          if (working / 'yarn.lock').is_file() and configs:
+              # Ask Yarn only for public settings; never archive its authentication configuration.
+              yarn_env = dict(os.environ, YARN_ENABLE_SCRIPTS='false', YARN_ENABLE_GLOBAL_CACHE='false')
+              for config in configs:
+                  for variable in re.findall(r'\$\{([A-Za-z_][A-Za-z0-9_]*)', config.read_text()):
+                      yarn_env[variable] = ''
+              def yarn(arguments):
+                  result = subprocess.run(['yarn', *arguments], cwd=working, env=yarn_env,
+                                          capture_output=True, text=True, timeout=30)
+                  if result.returncode:
+                      raise RuntimeError('Cannot read public Yarn build configuration')
+                  return result.stdout.strip()
+              if not yarn(['--version']).startswith('1.'):
+                  linker = json.loads(yarn(['config', 'get', 'nodeLinker', '--json']))
+                  if linker not in {'pnp', 'pnpm', 'node-modules'}:
+                      raise RuntimeError('Unsupported Yarn nodeLinker')
+                  yarn_config = {'nodeLinker': linker, 'enableGlobalCache': False}
+                  for setting in ['yarnPath', 'cacheFolder']:
+                      value = json.loads(yarn(['config', 'get', setting, '--json']))
+                      if value is None and setting == 'yarnPath':
+                          continue
+                      if not isinstance(value, str):
+                          raise RuntimeError('Invalid public Yarn path setting: ' + setting)
+                      resolved = (working / value).resolve()
+                      if not resolved.is_relative_to(root) or private(resolved.relative_to(root).parts):
+                          raise RuntimeError('Yarn build path reaches a private or external file: ' + setting)
+                      yarn_config[setting] = os.path.relpath(resolved, working)
+          with tarfile.open(target, 'w:gz', dereference=False) as archive:
               archive.add(root, arcname='.', filter=safe)
+              if yarn_config is not None:
+                  content = json.dumps(yarn_config).encode()
+                  info = tarfile.TarInfo((working.relative_to(root) / '.yarnrc.yml').as_posix())
+                  info.size, info.mode = len(content), 0o600
+                  archive.addfile(info, io.BytesIO(content))
           PY
 
       - name: Upload dependencies artifact
@@ -491,25 +541,35 @@ jobs:
               parts = pathlib.PurePosixPath(info.name).parts
               if private(parts):
                   return None
-              if info.isfile():
+              if info.isfile() or info.islnk() or (info.issym() and (root / info.name).is_file()):
                   stat = (root / info.name).stat()
                   if (stat.st_dev, stat.st_ino) in protected_inodes:
                       raise RuntimeError('Artifact alias reaches a private file: ' + info.name)
-              if info.issym() or info.islnk():
-                  raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
-              if not (info.isfile() or info.isdir()):
+              if info.issym():
+                  resolved = (root / info.name).resolve(strict=True)
+                  info.linkname = os.path.relpath(resolved, (root / info.name).parent)
+              elif info.islnk():
+                  resolved = (root / info.linkname).resolve(strict=True)
+                  if not resolved.is_relative_to(root) or private(resolved.relative_to(root).parts):
+                      raise RuntimeError('Artifact hardlink reaches a private or external file: ' + info.name)
+                  info.linkname = resolved.relative_to(root).as_posix()
+              if not (info.isfile() or info.isdir() or info.issym() or info.islnk()):
                   raise RuntimeError('Unsupported deployment artifact entry: ' + info.name)
               return info
           metadata = root / '.sympress-artifact.json'
+          if metadata.is_symlink() or (metadata.is_file() and metadata.stat().st_nlink > 1):
+              raise RuntimeError('Artifact metadata must not alias another file')
           metadata.write_text(json.dumps({'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}))
           for path in root.rglob('*'):
               if path.is_symlink():
+                  if pathlib.Path(os.readlink(path)).is_absolute():
+                      raise RuntimeError('Artifact link must be relative: ' + str(path.relative_to(root)))
                   resolved = path.resolve(strict=True)
                   if not resolved.is_relative_to(root):
                       raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
                   if not private(path.relative_to(root).parts) and private(resolved.relative_to(root).parts):
                       raise RuntimeError('Artifact link reaches a private file: ' + str(path.relative_to(root)))
-          with tarfile.open(target, 'w:gz', dereference=True) as archive:
+          with tarfile.open(target, 'w:gz', dereference=False) as archive:
               archive.add(root, arcname='.', filter=safe)
           PY
 
