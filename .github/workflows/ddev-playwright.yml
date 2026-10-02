@@ -217,8 +217,14 @@ jobs:
           cat > .ddev/docker-compose.install-auth.yaml <<YAML
           services:
             web:
+              environment:
+                SSH_AUTH_SOCK: ""
               volumes:
                 - "$auth_dir:/run/sympress-install-auth:ro"
+          YAML
+          cat > .ddev/config.install-auth.yaml <<'YAML'
+          omit_containers:
+            - ddev-ssh-agent
           YAML
 
       - name: Add DDEV environment variables
@@ -294,9 +300,8 @@ jobs:
             done < "$auth_dir/known_hosts"
             ssh-keygen -l -f "$auth_dir/known_hosts" >/dev/null
           fi
-          # Variables expand inside the container, not on the host.
-          # shellcheck disable=SC2016
-          ddev exec bash -c '
+          # Read a literal script from the private mount; never serialize its contents.
+          cat > "$auth_dir/install.sh" <<'BASH'
             set -euo pipefail
             export GIT_SSH_COMMAND="ssh -i /run/sympress-install-auth/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/run/sympress-install-auth/known_hosts"
             if [ -f /run/sympress-install-auth/auth.json ]; then
@@ -307,7 +312,8 @@ jobs:
               composer validate --strict --no-check-publish
               composer install --no-interaction --no-progress --no-scripts --no-plugins
             fi
-          '
+          BASH
+          ddev exec --raw -- bash /run/sympress-install-auth/install.sh
           export NPM_CONFIG_USERCONFIG="$auth_dir/npmrc"
           if [ -f pnpm-lock.yaml ]; then
             corepack enable
@@ -337,9 +343,9 @@ jobs:
         run: |
           set -euo pipefail
           test -z "$(find "${RUNNER_TEMP}/sympress-install-auth" -type f -print -quit)"
-          # Variables expand inside the container, not on the host.
-          # shellcheck disable=SC2016
-          ddev exec bash -c 'test -z "$(find /run/sympress-install-auth -type f -print -quit)"; test -z "${SSH_AUTH_SOCK:-}"'
+          remaining="$(ddev exec --raw -- find /run/sympress-install-auth -type f -print -quit)"
+          test -z "$remaining"
+          ddev exec --raw -- php -r 'exit((getenv("SSH_AUTH_SOCK") === false || getenv("SSH_AUTH_SOCK") === "") && !file_exists("/home/.ssh-agent/socket") ? 0 : 1);'
 
       - name: Run setup command
         if: ${{ inputs.setup_command != '' }}
@@ -443,10 +449,8 @@ jobs:
         shell: bash
         run: |
           rm -f "${RUNNER_TEMP}/sympress-install-auth"/*
-          # Variables expand inside the container, not on the host.
-          # shellcheck disable=SC2016
-          ddev exec bash -c 'test -z "$(find /run/sympress-install-auth -type f -print -quit)"' || true
-          rm -f .ddev/docker-compose.install-auth.yaml
+          remaining="$(ddev exec --raw -- find /run/sympress-install-auth -type f -print -quit)" && test -z "$remaining" || true
+          rm -f .ddev/docker-compose.install-auth.yaml .ddev/config.install-auth.yaml
 
       - name: Stop DDEV
         if: ${{ always() }}
