@@ -8,6 +8,19 @@ import { pathToFileURL } from 'node:url';
 const root = mkdtempSync(path.join(tmpdir(), 'sympress-release-tooling-'));
 const tools = path.join(root, 'tools');
 mkdirSync(tools);
+const fixtureHome = path.join(root, 'home');
+mkdirSync(fixtureHome);
+// Build a local-only fixture environment rather than inheriting hosted PR/CI
+// detection, credentials, Git configuration or runner output-file locations.
+const fixtureEnvironment = {
+  PATH: process.env.PATH,
+  HOME: fixtureHome,
+  LANG: 'C.UTF-8',
+  TMPDIR: tmpdir(),
+  CI: 'false',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: '/dev/null',
+};
 const run = (command, args, cwd, env = process.env) => {
   const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout: 120000 });
   assert.equal(result.status, 0, `${command} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`);
@@ -46,22 +59,22 @@ try {
   const realGit = run('which', ['git'], root).stdout.trim();
   writeFileSync(path.join(fakeBin, 'git'), `#!/bin/sh\nprintf '%s\\n' "$@" >> "$GIT_ARGUMENT_LOG"\nif [ "\${FAIL_GIT_AUTH:-}" = true ] && [ "$1" = push ]; then exit 7; fi\nexec ${JSON.stringify(realGit)} "$@"\n`, { mode: 0o700 });
   const authUrl = (await import(pathToFileURL(path.join(tools, 'node_modules/semantic-release/lib/get-git-auth-url.js')))).default;
-  const url = await authUrl({ cwd: root, env: { ...process.env, ...core, PATH: `${fakeBin}:${process.env.PATH}`, GIT_ARGUMENT_LOG: argsLog, FAIL_GIT_AUTH: 'true' }, branch: { name: 'main' }, options: { repositoryUrl: 'https://github.com/example/repo.git' } });
+  const url = await authUrl({ cwd: root, env: { ...fixtureEnvironment, ...core, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, FAIL_GIT_AUTH: 'true' }, branch: { name: 'main' }, options: { repositoryUrl: 'https://github.com/example/repo.git' } });
   assert.equal(url, 'https://github.com/example/repo.git');
   assert(!readFileSync(argsLog, 'utf8').includes('canary-token'));
   for (const variant of ['fallback', 'consumer']) {
     const cwd = path.join(root, variant);
     const bare = path.join(root, `${variant}.git`);
     mkdirSync(cwd);
-    run('git', ['init', '--bare', bare], root);
-    run('git', ['init', '-b', 'main'], cwd);
-    run('git', ['config', 'user.email', 'fixture@example.test'], cwd);
-    run('git', ['config', 'user.name', 'Fixture'], cwd);
-    run('git', ['remote', 'add', 'origin', bare], cwd);
+    run('git', ['init', '--bare', '-b', 'main', bare], root, fixtureEnvironment);
+    run('git', ['init', '-b', 'main'], cwd, fixtureEnvironment);
+    run('git', ['config', 'user.email', 'fixture@example.test'], cwd, fixtureEnvironment);
+    run('git', ['config', 'user.name', 'Fixture'], cwd, fixtureEnvironment);
+    run('git', ['remote', 'add', 'origin', bare], cwd, fixtureEnvironment);
     writeFileSync(path.join(cwd, 'README.md'), 'fixture');
-    run('git', ['add', 'README.md'], cwd);
-    run('git', ['commit', '-m', 'feat: fixture'], cwd);
-    run('git', ['push', '-u', 'origin', 'main'], cwd);
+    run('git', ['add', 'README.md'], cwd, fixtureEnvironment);
+    run('git', ['commit', '-m', 'feat: fixture'], cwd, fixtureEnvironment);
+    run('git', ['push', '-u', 'origin', 'main'], cwd, fixtureEnvironment);
     let prefix;
     if (variant === 'fallback') {
       const fallback = path.join(cwd, 'fallback.cjs');
@@ -73,11 +86,16 @@ try {
     writeFileSync(path.join(cwd, 'release.config.cjs'), `module.exports={${prefix}repositoryUrl:${JSON.stringify(bare)},branches:['main'],verifyConditions:[],generateNotes:()=> 'Fixture notes',prepare:[],publish:[],success:[],fail:[]};`);
     const configuration = await entry.configuration(path.join(cwd, 'release.config.cjs'));
     assert(configuration.plugins.some(item => (Array.isArray(item) ? item[0] : item).endsWith('github-auth-plugin.mjs')));
-    const result = run('node', [path.join(tools, 'run-release.mjs')], cwd, { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, GIT_ARGUMENT_LOG: argsLog, RELEASE_CONFIG: 'release.config.cjs', SYMPRESS_RELEASE_DRY_RUN: 'true', GITHUB_TOKEN: 'canary-token', SYMPRESS_RELEASE_TOKEN: 'canary-token', CI: 'false' });
+    const result = run('node', [path.join(tools, 'run-release.mjs')], cwd, { ...fixtureEnvironment, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, RELEASE_CONFIG: 'release.config.cjs', SYMPRESS_RELEASE_DRY_RUN: 'true', GITHUB_TOKEN: 'canary-token', SYMPRESS_RELEASE_TOKEN: 'canary-token' });
     assert.match(result.stdout + result.stderr, /dry-run/);
-    assert.equal(run('git', ['tag', '--list'], cwd).stdout.trim(), '');
-    assert.equal(run('git', ['--git-dir', bare, 'tag', '--list'], root).stdout.trim(), '');
+    assert.match(result.stdout + result.stderr, /next release version is 1\.0\.0/);
+    const expectedTag = variant === 'fallback' ? '1.0.0' : 'v1.0.0';
+    assert((result.stdout + result.stderr).includes(`Skip ${expectedTag} tag creation in dry-run mode`));
+    assert.doesNotMatch(result.stdout + result.stderr, /triggered by a pull request/);
+    assert.equal(run('git', ['tag', '--list'], cwd, fixtureEnvironment).stdout.trim(), '');
+    assert.equal(run('git', ['--git-dir', bare, 'tag', '--list'], root, fixtureEnvironment).stdout.trim(), '');
     assert(!readFileSync(path.join(cwd, '.git/config'), 'utf8').includes('canary-token'));
+    console.log(`Passed ${variant} release analysis for 1.0.0 in dry-run mode with no local or remote tags.`);
   }
   assert(!readFileSync(argsLog, 'utf8').includes('canary-token'));
   console.log('Passed locked tool install, fallback and consumer dry runs, and Git authentication-failure credential canaries.');

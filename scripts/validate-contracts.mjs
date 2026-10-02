@@ -59,6 +59,21 @@ assert(
   fixtureMonorepoPackage.license,
   'fixtures/monorepo/packages/example/composer.json must include a license for strict Composer validation',
 );
+for (const tool of ['squizlabs/php_codesniffer', 'phpstan/phpstan', 'phpunit/phpunit']) {
+  assert(fixtureMonorepoPackage['require-dev']?.[tool], `Monorepo QA fixture must install ${tool}`);
+}
+for (const file of ['phpcs.xml.dist', 'phpstan.neon.dist', 'phpunit.xml.dist', 'src/Example.php', 'tests/ExampleTest.php']) {
+  assert(existsSync(path.join(root, 'fixtures/monorepo/packages/example', file)), `Monorepo QA fixture must include ${file}`);
+}
+assert(
+  fixtureMonorepoPackage.autoload?.['psr-4']?.['Sympress\\Fixture\\Monorepo\\'] === 'src/',
+  'Monorepo QA fixture must autoload its actual tested source',
+);
+const monorepoCaller = parseDocument(read('.github/workflows/_repository-checks.yml')).toJS().jobs['fixture-monorepo-qa'];
+for (const gate of ['run_validate', 'run_phpcs', 'run_phpstan', 'run_phpunit']) {
+  const defaultEnabled = parseDocument(read('.github/workflows/sympress-qa.yml')).toJS().on.workflow_call.inputs[gate].default;
+  assert((monorepoCaller.with?.[gate] ?? defaultEnabled) === true, `Monorepo QA fixture must enable ${gate}`);
+}
 
 for (const file of workflowFiles) {
   assert(catalogWorkflowFiles.has(file), `workflow-catalog.json must include ${file}`);

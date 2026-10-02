@@ -121,7 +121,6 @@ jobs:
       include_root: false
       package_glob: fixtures/monorepo/packages/*
       run_audit: false
-      run_phpunit: false
 
   fixture-archive:
     name: Fixture WordPress archive
