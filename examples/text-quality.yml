@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   text-quality:
-    uses: sympress/workflows/.github/workflows/text-quality.yml@v1
+    uses: sympress/workflows/.github/workflows/text-quality.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
     with:
       cspell_config: cspell.json
       run_grammar: ${{ github.event_name == 'pull_request' }}

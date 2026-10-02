@@ -23,7 +23,8 @@ git tag v1 1.0.0
 git push origin 1.0.0 v1
 ```
 
-Production callers should use a tag or commit SHA instead of `@main`.
+Production callers should use a reviewed full commit SHA, as in the examples.
+Verify a release tag's commit before adopting it.
 
 If the repository lives under another owner or name, replace
 `sympress/workflows` in all caller examples with the actual
@@ -68,7 +69,7 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
     with:
       php_version: '8.5'
 ```

@@ -14,12 +14,12 @@ tags, clear migration notes, and a fast path for urgent fixes.
 
 ## Caller Pinning
 
-Production repositories should call workflows with a tag:
+Production repositories should call workflows with a reviewed full commit SHA:
 
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
 ```
 
 Use `@main` only while testing a new workflow or validating an upcoming change.

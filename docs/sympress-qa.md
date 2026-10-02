@@ -5,7 +5,7 @@ Use `sympress-qa.yml` for Composer-first SymPress packages and monorepos.
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
     with:
       php_version: '8.5'
       include_root: true

@@ -6,7 +6,7 @@ without mixing them into PHP or JavaScript lint jobs.
 ```yml
 jobs:
   text-quality:
-    uses: sympress/workflows/.github/workflows/text-quality.yml@v1
+    uses: sympress/workflows/.github/workflows/text-quality.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
 ```
 
 Defaults run:
