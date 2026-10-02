@@ -580,6 +580,12 @@
           "default": "",
           "required": false
         },
+        "composer_update": {
+          "description": "Update Composer dependencies during the private fetch phase.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
         "ddev_start_command": {
           "description": "Command used to start DDEV.",
           "type": "string",

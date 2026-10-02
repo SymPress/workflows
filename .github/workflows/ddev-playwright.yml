@@ -13,6 +13,11 @@ on:
         type: string
         default: ''
         required: false
+      composer_update:
+        description: Update Composer dependencies during the private fetch phase.
+        type: boolean
+        default: false
+        required: false
       ddev_start_command:
         description: Command used to start DDEV.
         type: string
@@ -275,6 +280,7 @@ jobs:
       - name: Install dependencies with private authentication
         shell: bash
         env:
+          COMPOSER_UPDATE: ${{ inputs.composer_update }}
           COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
           NPM_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
@@ -303,6 +309,11 @@ jobs:
           # Read a literal script from the private mount; never serialize its contents.
           cat > "$auth_dir/install.sh" <<'BASH'
             set -euo pipefail
+            composer_update="${1:-false}"
+            case "$composer_update" in
+              true|false) ;;
+              *) echo "::error::composer_update must be true or false."; exit 1 ;;
+            esac
             export GIT_SSH_COMMAND="ssh -i /run/sympress-install-auth/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/run/sympress-install-auth/known_hosts"
             if [ -f /run/sympress-install-auth/auth.json ]; then
               export COMPOSER_AUTH="$(cat /run/sympress-install-auth/auth.json)"
@@ -310,10 +321,14 @@ jobs:
             if [ -f composer.json ]; then
               test -f composer.lock
               composer validate --strict --no-check-publish
-              composer install --no-interaction --no-progress --no-scripts --no-plugins
+              if [ "$composer_update" = true ]; then
+                composer update --with-all-dependencies --no-interaction --no-progress --no-scripts --no-plugins
+              else
+                composer install --no-interaction --no-progress --no-scripts --no-plugins
+              fi
             fi
           BASH
-          ddev exec --raw -- bash /run/sympress-install-auth/install.sh
+          ddev exec --raw -- bash /run/sympress-install-auth/install.sh "${COMPOSER_UPDATE:-false}"
           export NPM_CONFIG_USERCONFIG="$auth_dir/npmrc"
           if [ -f pnpm-lock.yaml ]; then
             corepack enable

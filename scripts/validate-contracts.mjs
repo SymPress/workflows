@@ -282,7 +282,13 @@ for (const name of ['Install project dependencies', 'Install deployment dependen
 assert(namedStep(deploySteps, 'Install deployment dependencies').run.includes('test -f composer.lock'), 'deployment tooling must require a lock');
 const releaseSteps = parseDocument(release).toJS().jobs['automatic-release'].steps;
 assert(stepPosition(releaseSteps, 'Install locked release tooling') < stepPosition(releaseSteps, 'Configure SSH'), 'release tooling must install before SSH auth');
-const ddevSteps = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS().jobs['ddev-playwright'].steps;
+const ddevWorkflow = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS();
+const ddevSteps = ddevWorkflow.jobs['ddev-playwright'].steps;
+const composerUpdateInput = ddevWorkflow.on.workflow_call.inputs.composer_update;
+assert(composerUpdateInput.type === 'boolean' && composerUpdateInput.default === false && composerUpdateInput.required === false, 'DDEV Composer update must be an optional boolean with a locked-install default');
+assert(namedStep(ddevSteps, 'Install dependencies with private authentication').env.COMPOSER_UPDATE === '${{ inputs.composer_update }}', 'DDEV Composer update input must enter the dependency step through env');
+assert(ddevWorkflow.jobs['ddev-playwright'].env?.COMPOSER_UPDATE === undefined, 'DDEV Composer update mode must not be job-wide');
+assert(namedStep(ddevSteps, 'Install dependencies with private authentication').run.includes('composer update --with-all-dependencies --no-interaction --no-progress --no-scripts --no-plugins'), 'DDEV Composer update must disable scripts and plugins during authenticated fetch');
 assert(stepPosition(ddevSteps, 'Verify install credentials removed') < stepPosition(ddevSteps, 'Run setup command'), 'DDEV setup must run after credentials disappear');
 assert(!read('.github/workflows/ddev-playwright.yml').includes('accept-new'), 'DDEV cannot auto-trust host keys');
 assert(read('.github/workflows/ddev-playwright.yml').includes(':ro'), 'DDEV auth must use a private read-only mount');
