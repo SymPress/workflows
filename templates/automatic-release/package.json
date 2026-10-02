@@ -11,7 +11,7 @@
     "@semantic-release/github": "12.0.10",
     "@semantic-release/release-notes-generator": "14.1.1",
     "conventional-changelog-conventionalcommits": "9.3.1",
-    "cosmiconfig": "9.0.2",
+    "cosmiconfig": "10.0.1",
     "@sympress/release-disabled-npm-plugin": "file:./disabled-npm-plugin"
   },
   "overrides": {
