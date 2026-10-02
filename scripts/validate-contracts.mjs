@@ -269,17 +269,29 @@ assert(release.includes('RELEASE_CONFIG: ${{ inputs.release_config }}'), 'automa
 
 const deployWorkflow = parseDocument(deploy).toJS();
 const deploySteps = deployWorkflow.jobs.deploy.steps;
+const dependencySteps = deployWorkflow.jobs.dependencies.steps;
+const buildSteps = deployWorkflow.jobs.build.steps;
+assert(deployWorkflow.jobs.build.needs === 'dependencies', 'build must consume the fetched artifact');
+assert(deployWorkflow.jobs.deploy.needs === 'build', 'deploy must consume the built artifact');
+assert(!JSON.stringify(deployWorkflow.jobs.build).includes('secrets.'), 'build must have no secret references');
+assert(!deployWorkflow.jobs.build.environment, 'build must not access deployment environment secrets');
+assert(namedWorkflowArtifact(deployWorkflow.jobs.build, 'dependencies'), 'build must restore the exact dependency artifact');
+assert(namedWorkflowArtifact(deployWorkflow.jobs.deploy, 'build'), 'deploy must restore the exact built artifact');
+function namedWorkflowArtifact(job, producer) {
+  return job.steps.some(step => step.with?.['artifact-ids'] === '${{ needs.' + producer + '.outputs.artifact_id }}');
+}
 const namedStep = (steps, name) => steps.find(step => step.name === name);
 const stepPosition = (steps, name) => steps.findIndex(step => step.name === name);
 assert(!deployWorkflow.jobs.deploy.env.NODE_AUTH_TOKEN, 'deploy token must not be job-wide');
-assert(stepPosition(deploySteps, 'Build Node assets') < stepPosition(deploySteps, 'Set up SSH'), 'production agent must load after builds');
+assert(namedStep(buildSteps, 'Build Node assets'), 'build code must run in the build job');
+assert(!namedStep(deploySteps, 'Build Node assets'), 'deployment secrets must never coexist with build code');
 assert(namedStep(deploySteps, 'Run Deployer')['continue-on-error'] !== true, 'deploy preflight failure must fail naturally');
 assert(namedStep(deploySteps, 'Fail on Deployer result').run.includes('OUTCOME'), 'deploy final guard must require successful outcome');
 assert(namedStep(deploySteps, 'Run Deployer').run.includes('statuses=("${PIPESTATUS[@]}")'), 'deploy must preserve deploy and tee exit statuses');
 for (const name of ['Install project dependencies', 'Install deployment dependencies']) {
-  assert(namedStep(deploySteps, name).run.includes('--no-scripts --no-plugins'), 'Composer fetch must not execute code with credentials');
+  assert(namedStep(dependencySteps, name).run.includes('--no-scripts --no-plugins'), 'Composer fetch must not execute code with credentials');
 }
-assert(namedStep(deploySteps, 'Install deployment dependencies').run.includes('test -f composer.lock'), 'deployment tooling must require a lock');
+assert(namedStep(dependencySteps, 'Install deployment dependencies').run.includes('test -f composer.lock'), 'deployment tooling must require a lock');
 const releaseSteps = parseDocument(release).toJS().jobs['automatic-release'].steps;
 assert(stepPosition(releaseSteps, 'Install locked release tooling') < stepPosition(releaseSteps, 'Configure SSH'), 'release tooling must install before SSH auth');
 const ddevWorkflow = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS();

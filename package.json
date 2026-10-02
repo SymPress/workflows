@@ -13,6 +13,7 @@
     "test:consumers": "node scripts/validate-consumers.mjs",
     "test:contracts": "node scripts/validate-contracts.mjs",
     "test:shell": "node scripts/test-runner-shell.mjs",
+    "test:artifacts": "node scripts/test-deploy-artifact.mjs",
     "test:canary": "node scripts/test-canary-notification.mjs",
     "test:release": "node scripts/test-release-tooling.mjs"
   },

@@ -90,6 +90,7 @@ jobs:
 
       - name: Exercise runner shell failure paths
         run: npm run test:shell
+          npm run test:artifacts
 
       - name: Exercise canary incident lifecycle
         run: npm run test:canary
@@ -186,3 +187,12 @@ jobs:
 
       - name: Validate consumer calls
         run: npm run test:consumers -- .canary/${{ matrix.name }}
+
+  deploy-artifact-fixture:
+    name: Deployer artifact fixture
+    uses: ./.github/workflows/deploy-deployer.yml
+    with:
+      environment: fixture
+      working_directory: fixtures/deployer
+      deployment_directory: fixtures/deployer
+      use_ssh: false
