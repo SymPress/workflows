@@ -43,7 +43,7 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@v1
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
 ```
 
 ## 3. Configure Secrets
@@ -141,5 +141,5 @@ Open a small pull request that only adds workflow files. Verify:
 
 ## 7. Pin And Upgrade
 
-Start with `@v1` after the first stable release. For stricter repositories, pin
-to `@1.0.0` or a commit SHA. Upgrade one repository first, then roll out.
+Start with the reviewed full commit SHA in the copyable examples. Verify the
+replacement release commit and upgrade one repository first, then roll out.

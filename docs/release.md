@@ -5,15 +5,19 @@ Use `automatic-release.yml` for semantic-release based releases.
 ```yml
 jobs:
   release:
-    uses: sympress/workflows/.github/workflows/automatic-release.yml@v1
+    uses: sympress/workflows/.github/workflows/automatic-release.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    with:
+      workflow_ref: 177fa0d727b278d2103052ec77c102b4a4c492a0
     secrets:
       GITHUB_USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 If the repository has `release.config.cjs`, it is used. Otherwise, the workflow
 copies the built-in SymPress config and helper script from the pinned
-`workflow_ref` input. The default is `v1`, so create the workflow tag
-before relying on the fallback config in production.
+`workflow_ref` input. The example explicitly pins that input to the same reviewed
+commit as the workflow call, selecting its configuration and locked toolchain.
+The compatibility default remains `v1`; set the input explicitly when adopting
+the reviewed version.
 
 The fallback config:
 
@@ -50,7 +54,7 @@ failure. The wrapper keeps tokens out of semantic-release's core Git environment
 and supplies the GitHub API token only to the official GitHub plugin. Consumer
 plugins and release configs are trusted release code and can read step credentials.
 The helper, tooling directory, signing files, and optional SSH agent are cleaned
-up afterward. Production callers should pin this workflow to a release tag.
+up afterward. Production callers should pin both refs to a reviewed full commit SHA.
 See [Release Strategy](release-strategy.md).
 
 Release tooling has a separate moderate-severity audit gate. Do not publish a new

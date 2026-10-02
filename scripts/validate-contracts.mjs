@@ -257,8 +257,8 @@ const releaseLock = JSON.parse(read('templates/automatic-release/package-lock.js
 assert(releaseManifest.overrides['@semantic-release/npm'] === '$@sympress/release-disabled-npm-plugin', 'unused npm publication engine must be replaced by explicit local guard');
 assert(!releaseLock.packages['node_modules/npm'], 'release tooling must not install unused vulnerable bundled npm');
 assert(!read('templates/automatic-release/release.config.cjs').includes('@semantic-release/npm'), 'fallback release config must only use supported release plugins');
-assert(releaseManifest.dependencies['semantic-release'] === '25.0.5', 'locked release tooling must pin semantic-release');
-assert(releaseLock.packages['node_modules/semantic-release'].version === '25.0.5', 'release lock must pin transitive tooling');
+assert(releaseManifest.dependencies['semantic-release'] === '25.0.9', 'locked release tooling must pin semantic-release');
+assert(releaseLock.packages['node_modules/semantic-release'].version === '25.0.9', 'release lock must pin transitive tooling');
 assert(release.includes('npm ci --prefix "$tools_dir" --ignore-scripts'), 'release tools must be installed locked without lifecycle scripts');
 assert(!release.includes('x-access-token:${'), 'release PAT must not be embedded into a Git URL');
 assert(release.includes('GIT_CONFIG_KEY_0=credential.helper'), 'release Git auth must be ephemeral');
@@ -282,7 +282,13 @@ for (const name of ['Install project dependencies', 'Install deployment dependen
 assert(namedStep(deploySteps, 'Install deployment dependencies').run.includes('test -f composer.lock'), 'deployment tooling must require a lock');
 const releaseSteps = parseDocument(release).toJS().jobs['automatic-release'].steps;
 assert(stepPosition(releaseSteps, 'Install locked release tooling') < stepPosition(releaseSteps, 'Configure SSH'), 'release tooling must install before SSH auth');
-const ddevSteps = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS().jobs['ddev-playwright'].steps;
+const ddevWorkflow = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS();
+const ddevSteps = ddevWorkflow.jobs['ddev-playwright'].steps;
+const composerUpdateInput = ddevWorkflow.on.workflow_call.inputs.composer_update;
+assert(composerUpdateInput.type === 'boolean' && composerUpdateInput.default === false && composerUpdateInput.required === false, 'DDEV Composer update must be an optional boolean with a locked-install default');
+assert(namedStep(ddevSteps, 'Install dependencies with private authentication').env.COMPOSER_UPDATE === '${{ inputs.composer_update }}', 'DDEV Composer update input must enter the dependency step through env');
+assert(ddevWorkflow.jobs['ddev-playwright'].env?.COMPOSER_UPDATE === undefined, 'DDEV Composer update mode must not be job-wide');
+assert(namedStep(ddevSteps, 'Install dependencies with private authentication').run.includes('composer update --with-all-dependencies --no-interaction --no-progress --no-scripts --no-plugins'), 'DDEV Composer update must disable scripts and plugins during authenticated fetch');
 assert(stepPosition(ddevSteps, 'Verify install credentials removed') < stepPosition(ddevSteps, 'Run setup command'), 'DDEV setup must run after credentials disappear');
 assert(!read('.github/workflows/ddev-playwright.yml').includes('accept-new'), 'DDEV cannot auto-trust host keys');
 assert(read('.github/workflows/ddev-playwright.yml').includes(':ro'), 'DDEV auth must use a private read-only mount');

@@ -14,6 +14,8 @@ permissions:
 
 jobs:
   release:
-    uses: sympress/workflows/.github/workflows/automatic-release.yml@v1
+    uses: sympress/workflows/.github/workflows/automatic-release.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    with:
+      workflow_ref: 177fa0d727b278d2103052ec77c102b4a4c492a0
     secrets:
       GITHUB_USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
