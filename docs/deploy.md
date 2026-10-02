@@ -60,7 +60,16 @@ Deployer locks with scripts and plugins disabled and fetch-only credentials.
 any operator secrets or deployment environment. `deploy` restores the built
 artifact by its exact ID, verifies its source commit and run, then loads SSH
 and optional WireGuard credentials. Secret files, authentication configuration,
-VCS metadata and caches are excluded; external links fail packaging.
+VCS metadata and private caches are excluded. Internal relative symlinks retain
+pnpm's dependency resolution; absolute or external links and links or hardlinks
+to private files fail packaging. Restores use Python's `data` extraction filter.
+
+Modern Yarn uses a workspace-local cache so PnP dependencies survive the job
+boundary. The dependency artifact replaces `.yarnrc.yml` with only public
+`nodeLinker`, `enableGlobalCache`, `yarnPath` and `cacheFolder` settings. Yarn paths
+must remain inside the workspace; registry and authentication settings are
+excluded, and the original configuration is unchanged. The release artifact
+omits this configuration and `node_modules` after the build.
 
 The default SSH transport requires `GITHUB_USER_SSH_KEY` at runtime.
 Set `use_ssh: false` only for Deployer recipes using local or non-SSH hosts.
