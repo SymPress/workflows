@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -48,6 +48,18 @@ try {
   for (const name of ['.env.example', '.env.generated', 'auth.json', '.npmrc']) assert(!existsSync(path.join(deploy, name)));
   result = run('deploy', 'Restore release artifact', deploy, 'release', { GITHUB_SHA: 'different-commit' });
   assert.notEqual(result.status, 0, 'Different commit must fail provenance');
+  for (const privateName of ['auth.json', '.env', '.env.production']) {
+    symlinkSync(privateName, path.join(source, 'public-alias.json'));
+    result = run('dependencies', 'Package dependencies artifact', source, 'dependencies');
+    assert.notEqual(result.status, 0, 'A public link to private files must fail packaging');
+    result = run('build', 'Package release artifact', source, 'release');
+    assert.notEqual(result.status, 0, 'A release link to private files must fail packaging');
+    rmSync(path.join(source, 'public-alias.json'));
+  }
+  linkSync(path.join(source, 'auth.json'), path.join(source, 'hard-link.json'));
+  result = run('dependencies', 'Package dependencies artifact', source, 'dependencies');
+  assert.notEqual(result.status, 0, 'Hard-linked private files must fail packaging');
+  rmSync(path.join(source, 'hard-link.json'));
   symlinkSync('/etc/passwd', path.join(source, 'external-link'));
   result = run('dependencies', 'Package dependencies artifact', source, 'dependencies');
   assert.notEqual(result.status, 0, 'External links must fail packaging');

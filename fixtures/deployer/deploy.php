@@ -7,6 +7,8 @@ namespace Deployer;
 require 'recipe/common.php';
 
 localhost('fixture');
-task('deploy', static function (): void {
+task('deploy:fixture', static function (): void {
     run('cd ' . escapeshellarg(__DIR__) . ' && php verify.php');
 });
+
+task('deploy', ['deploy:fixture']);

@@ -234,14 +234,25 @@ jobs:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
 
-      - name: Set up Node with cache
+      - name: Set up Node for locked package manager
         if: ${{ steps.node.outputs.enabled == 'true' && steps.package-manager.outputs.cache != '' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
-          cache: ${{ steps.package-manager.outputs.cache }}
-          cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
+
+      - name: Activate package manager
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ] || [ -f yarn.lock ]; then
+            if ! command -v corepack >/dev/null 2>&1; then
+              npm install --global corepack@0.34.6 --ignore-scripts --registry=https://registry.npmjs.org/
+            fi
+            corepack enable
+          fi
 
       - name: Install Node dependencies
         if: ${{ steps.node.outputs.enabled == 'true' }}
@@ -324,10 +335,21 @@ jobs:
           excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
           if kind == 'release':
               excluded.add('node_modules')
+          def private(parts):
+              return any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts)
+          protected_inodes = set()
+          for path in root.rglob('*'):
+              if path.is_file() and private(path.relative_to(root).parts):
+                  stat = path.stat()
+                  protected_inodes.add((stat.st_dev, stat.st_ino))
           def safe(info):
               parts = pathlib.PurePosixPath(info.name).parts
-              if any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts):
+              if private(parts):
                   return None
+              if info.isfile():
+                  stat = (root / info.name).stat()
+                  if (stat.st_dev, stat.st_ino) in protected_inodes:
+                      raise RuntimeError('Artifact alias reaches a private file: ' + info.name)
               if info.issym() or info.islnk():
                   raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
               if not (info.isfile() or info.isdir()):
@@ -340,6 +362,8 @@ jobs:
                   resolved = path.resolve(strict=True)
                   if not resolved.is_relative_to(root):
                       raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
+                  if not private(path.relative_to(root).parts) and private(resolved.relative_to(root).parts):
+                      raise RuntimeError('Artifact link reaches a private file: ' + str(path.relative_to(root)))
           with tarfile.open(target, 'w:gz', dereference=True) as archive:
               archive.add(root, arcname='.', filter=safe)
           PY
@@ -383,7 +407,8 @@ jobs:
           with tarfile.open(source) as archive:
               archive.extractall(root, filter='data')
           metadata = json.loads((root / '.sympress-artifact.json').read_text())
-          assert metadata == {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}, 'Artifact provenance mismatch'
+          if metadata != {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}:
+              raise RuntimeError('Artifact provenance mismatch')
           PY
 
       - name: Set up PHP
@@ -407,6 +432,19 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ inputs.node_version }}
+
+      - name: Activate package manager
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ] || [ -f yarn.lock ]; then
+            if ! command -v corepack >/dev/null 2>&1; then
+              npm install --global corepack@0.34.6 --ignore-scripts --registry=https://registry.npmjs.org/
+            fi
+            corepack enable
+          fi
 
       - name: Build Node assets
         if: ${{ steps.node.outputs.enabled == 'true' }}
@@ -442,10 +480,21 @@ jobs:
           excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
           if kind == 'release':
               excluded.add('node_modules')
+          def private(parts):
+              return any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts)
+          protected_inodes = set()
+          for path in root.rglob('*'):
+              if path.is_file() and private(path.relative_to(root).parts):
+                  stat = path.stat()
+                  protected_inodes.add((stat.st_dev, stat.st_ino))
           def safe(info):
               parts = pathlib.PurePosixPath(info.name).parts
-              if any(p in excluded or (p.startswith('.env') and not (kind == 'dependencies' and p == '.env.example')) for p in parts):
+              if private(parts):
                   return None
+              if info.isfile():
+                  stat = (root / info.name).stat()
+                  if (stat.st_dev, stat.st_ino) in protected_inodes:
+                      raise RuntimeError('Artifact alias reaches a private file: ' + info.name)
               if info.issym() or info.islnk():
                   raise RuntimeError('Deployment artifacts require materialized files, not links: ' + info.name)
               if not (info.isfile() or info.isdir()):
@@ -458,6 +507,8 @@ jobs:
                   resolved = path.resolve(strict=True)
                   if not resolved.is_relative_to(root):
                       raise RuntimeError('Artifact link escapes workspace: ' + str(path.relative_to(root)))
+                  if not private(path.relative_to(root).parts) and private(resolved.relative_to(root).parts):
+                      raise RuntimeError('Artifact link reaches a private file: ' + str(path.relative_to(root)))
           with tarfile.open(target, 'w:gz', dereference=True) as archive:
               archive.add(root, arcname='.', filter=safe)
           PY
@@ -508,7 +559,8 @@ jobs:
           with tarfile.open(source) as archive:
               archive.extractall(root, filter='data')
           metadata = json.loads((root / '.sympress-artifact.json').read_text())
-          assert metadata == {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}, 'Artifact provenance mismatch'
+          if metadata != {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}:
+              raise RuntimeError('Artifact provenance mismatch')
           PY
 
       - name: Set up PHP
