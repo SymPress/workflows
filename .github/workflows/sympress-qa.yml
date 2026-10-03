@@ -332,6 +332,50 @@ jobs:
               ' "$vendor_dir")"
               "${bin_dir%/}/phpcs" --config-set installed_paths "$standard_paths"
             fi
+            # Restore PHPStan discovery metadata without activating Composer plugins.
+            if [ -f "${vendor_dir%/}/autoload.php" ]; then
+              # shellcheck disable=SC2016
+              php -r '
+                require $argv[1] . "/autoload.php";
+                if (!Composer\InstalledVersions::isInstalled("phpstan/extension-installer")) {
+                    exit(0);
+                }
+                $installer = Composer\InstalledVersions::getInstallPath("phpstan/extension-installer");
+                if ($installer === null) {
+                    exit(0);
+                }
+                $root = json_decode(file_get_contents("composer.json"), true, 512, JSON_THROW_ON_ERROR);
+                $ignored = $root["extra"]["phpstan/extension-installer"]["ignore"] ?? [];
+                $extensions = [];
+                foreach (Composer\InstalledVersions::getInstalledPackages() as $name) {
+                    $path = Composer\InstalledVersions::getInstallPath($name);
+                    if ($path === null || in_array($name, $ignored, true)) {
+                        continue;
+                    }
+                    $manifest = $path . "/composer.json";
+                    if (!is_file($manifest)) {
+                        continue;
+                    }
+                    $package = json_decode(file_get_contents($manifest), true, 512, JSON_THROW_ON_ERROR);
+                    if (($package["type"] ?? "") !== "phpstan-extension" && !isset($package["extra"]["phpstan"])) {
+                        continue;
+                    }
+                    $extensions[$name] = [
+                        "install_path" => $path,
+                        "extra" => $package["extra"]["phpstan"] ?? null,
+                        "version" => Composer\InstalledVersions::getPrettyVersion($name),
+                    ];
+                }
+                ksort($extensions);
+                $content = "<?php\nnamespace PHPStan\\ExtensionInstaller;\nfinal class GeneratedConfig {\n"
+                    . "public const EXTENSIONS = " . var_export($extensions, true) . ";\n"
+                    . "public const NOT_INSTALLED = [];\npublic const PHPSTAN_VERSION_CONSTRAINT = null;\n}\n";
+                if (file_put_contents($installer . "/src/GeneratedConfig.php", $content) === false) {
+                    throw new RuntimeException("Cannot register PHPStan extensions.");
+                }
+                echo "PHPStan extensions registered: " . implode(", ", array_keys($extensions)) . "\n";
+              ' "$vendor_dir"
+            fi
           fi
 
           has_script() {

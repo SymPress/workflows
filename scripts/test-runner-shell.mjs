@@ -109,6 +109,56 @@ exit "\${UPDATE_EXIT:-0}"`);
   assert.equal(run(qa.run, updateFlags).status, 1, 'Canary QA must reject residual fetch key files');
   rmSync(path.join(root, 'composer-deploy-key'));
   checks += 2;
+  // Execute discovery with PHP when available, including consumer exclusions and
+  // extensions declared by ordinary library packages. Keep fetch secrets absent.
+  if (spawnSync('php', ['--version']).status === 0) {
+    const installer = path.join(root, 'vendor/phpstan/extension-installer');
+    mkdirSync(path.join(installer, 'src'), { recursive: true });
+    writeFileSync(path.join(root, 'vendor/autoload.php'), `<?php
+namespace Composer;
+final class InstalledVersions {
+  public static function isInstalled($name) { return $name === 'phpstan/extension-installer'; }
+  public static function getInstalledPackages() { return ['example/extension', 'example/library-extension', 'example/ignored', 'example/plain', 'example/provided']; }
+  public static function getInstallPath($name) { return $name === 'example/provided' ? null : __DIR__ . '/' . $name; }
+  public static function getPrettyVersion($name) { return '1.0.0'; }
+}
+`);
+    for (const [name, type, extra] of [
+      ['extension', 'phpstan-extension', { phpstan: { includes: ['extension.neon'] } }],
+      ['library-extension', 'library', { phpstan: { includes: ['rules.neon'] } }],
+      ['ignored', 'phpstan-extension', { phpstan: { includes: ['extension.neon'] } }],
+      ['plain', 'library', {}],
+    ]) {
+      const directory = path.join(root, 'vendor/example', name);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(path.join(directory, 'composer.json'), JSON.stringify({ name: `example/${name}`, type, extra }));
+    }
+    executable(path.join(root, 'fake-bin/composer'), `
+test -z "\${COMPOSER_AUTH:-}\${NODE_AUTH_TOKEN:-}\${SSH_AUTH_SOCK:-}\${SSH_AGENT_PID:-}\${GIT_SSH_COMMAND:-}" || exit 92
+if [ "$1" = config ]; then
+  if [ "$2" = vendor-dir ]; then echo vendor; else echo vendor/bin; fi
+fi`);
+    const generated = path.join(installer, 'src/GeneratedConfig.php');
+    for (const ignored of [['example/ignored'], []]) {
+      writeFileSync(path.join(root, 'composer.json'), JSON.stringify({ extra: { 'phpstan/extension-installer': { ignore: ignored } } }));
+      writeFileSync(generated, '<?php throw new RuntimeException("Stale discovery must be replaced without execution.");');
+      const result = run(qa.run, { ...updateFlags, COMPOSER_AUTH: 'fetch-only', NODE_AUTH_TOKEN: 'fetch-only', SSH_AUTH_SOCK: '/tmp/private-agent', SSH_AGENT_PID: '123', GIT_SSH_COMMAND: 'private-command' });
+      assert.equal(result.status, 0, result.stderr);
+      const inspection = spawnSync('php', ['-r', 'require $argv[1]; echo json_encode(PHPStan\\ExtensionInstaller\\GeneratedConfig::EXTENSIONS);', generated], { encoding: 'utf8' });
+      assert.equal(inspection.status, 0, inspection.stderr);
+      const extensions = JSON.parse(inspection.stdout);
+      assert.deepEqual(Object.keys(extensions), ignored.length === 0
+        ? ['example/extension', 'example/ignored', 'example/library-extension']
+        : ['example/extension', 'example/library-extension']);
+      assert.deepEqual(extensions['example/library-extension'].extra.includes, ['rules.neon']);
+      assert.equal(extensions['example/extension'].install_path, path.join(root, 'vendor/example/extension'));
+      checks++;
+    }
+    rmSync(path.join(root, 'vendor/autoload.php'));
+    rmSync(path.join(root, 'composer.json'));
+  } else {
+    console.log('PHPStan discovery fixture requires PHP; shell security checks still run.');
+  }
   // A fake install tool confirms secrets exist only during fetch and private files
   // are removed by the actual dependency-step EXIT trap, including failures.
   executable(path.join(root, 'fake-bin/npm'), 'test -f "$NPM_CONFIG_USERCONFIG" || exit 8; printf "%s" "$NPM_CONFIG_USERCONFIG" > auth-path; exit "${INSTALL_EXIT:-0}"');

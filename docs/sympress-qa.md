@@ -19,6 +19,13 @@ SymPress QA commands are strict without a separate `--strict` argument. A packag
 `composer qa` script is used when all three code/test gates are enabled; individual
 input switches remain authoritative when any gate is explicitly disabled.
 
+With `update_dependencies: true`, Composer fetches dependencies with scripts and
+plugins disabled. QA runs after fetch credentials are removed. The workflow then
+registers installed PHPCS standards and PHPStan extension metadata explicitly,
+including packages with `extra.phpstan` and the consumer's
+`extra.phpstan/extension-installer.ignore` list, so the enabled checks retain their
+rules without running Composer lifecycle hooks.
+
 Recognized Composer scripts:
 
 - Coding standards: `cs:audit`, `phpcs`, `cs`
