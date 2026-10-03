@@ -33,6 +33,7 @@ try {
   const sbomPath = path.join(source, 'sympress-sbom.cdx.json');
   const sbom = JSON.parse(readFileSync(sbomPath));
   assert.equal(sbom.bomFormat, 'CycloneDX');
+  assert.match(sbom.serialNumber, /^urn:uuid:[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.deepEqual(sbom.components.map(c => c.purl), ['pkg:composer/vendor/runtime@1.2.3', 'pkg:npm/web-lib@2.3.4']);
   writeFileSync(installed, JSON.stringify({ packages: [{ name: 'vendor/test-tool', version: '1.0.0' }] }));
   assert.notEqual(run('build', 'Generate production SBOM').status, 0, 'Installed dev tools must fail the release inventory');

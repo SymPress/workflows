@@ -571,7 +571,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os, pathlib, urllib.parse
+          import json, os, pathlib, urllib.parse, uuid
           root = pathlib.Path.cwd().resolve()
           working = (root / os.environ['WD']).resolve()
           if not working.is_relative_to(root):
@@ -609,7 +609,9 @@ jobs:
           limitations = []
           if (working / 'package.json').is_file() and not node_lock.is_file():
               limitations.append({'name': 'sympress:inventory-limitation', 'value': 'Non-npm JavaScript build inputs are not inventoried; Composer production inventory is complete.'})
-          sbom = {'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1,
+          serial = uuid.uuid5(uuid.NAMESPACE_URL, 'https://github.com/' + os.environ['GITHUB_REPOSITORY']
+                             + '/actions/runs/' + os.environ['GITHUB_RUN_ID'] + '/' + os.environ['GITHUB_SHA'])
+          sbom = {'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1, 'serialNumber': 'urn:uuid:' + str(serial),
                   'metadata': {'component': {'type': 'application', 'name': os.environ['GITHUB_REPOSITORY'],
                                             'version': os.environ['GITHUB_SHA']}, 'properties': limitations},
                   'components': [components[k] for k in sorted(components)]}
@@ -719,7 +721,7 @@ jobs:
           actual="$(sha256sum "${RUNNER_TEMP}/sympress-release/release.tgz" | cut -d ' ' -f 1)"
           test "$actual" = "$EXPECTED_SHA256"
           python3 - <<'PY'
-          import json, os, pathlib, tarfile
+          import json, os, pathlib, tarfile, uuid
           directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'sympress-release'
           with tarfile.open(directory / 'release.tgz') as archive:
               member = archive.getmember('./sympress-sbom.cdx.json')
@@ -729,6 +731,9 @@ jobs:
           sbom = json.loads(content)
           if sbom.get('bomFormat') != 'CycloneDX' or sbom.get('specVersion') != '1.6':
               raise RuntimeError('Required CycloneDX SBOM missing')
+          serial = sbom.get('serialNumber', '')
+          if not serial.startswith('urn:uuid:') or str(uuid.UUID(serial[9:])) != serial[9:]:
+              raise RuntimeError('Required SBOM attestation serial number missing')
           (directory / 'sbom.cdx.json').write_bytes(content)
           PY
       - name: Attest release provenance
