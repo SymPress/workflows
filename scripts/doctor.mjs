@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -118,7 +118,11 @@ function listFiles(relativeDirectory, predicate = () => true) {
 
   const files = [];
   for (const entry of readdirSync(absolute)) {
+    if (['node_modules', 'vendor', '.git'].includes(entry)) continue;
     const full = path.join(absolute, entry);
+    // Dependency/source aliases are not repository-owned files. Avoid dangling
+    // links, recursive links and paths outside the consumer during inspection.
+    if (lstatSync(full).isSymbolicLink()) continue;
     const relative = path.relative(targetRoot, full);
     if (statSync(full).isDirectory()) {
       files.push(...listFiles(relative, predicate));

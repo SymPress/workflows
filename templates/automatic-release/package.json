@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "braces": "file:./sympress-bounded-braces-1.0.0.tgz",
     "semantic-release": "25.0.9",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/commit-analyzer": "13.0.1",
@@ -15,6 +16,7 @@
     "@sympress/release-disabled-npm-plugin": "file:./disabled-npm-plugin"
   },
   "overrides": {
+    "braces": "$braces",
     "@semantic-release/npm": "$@sympress/release-disabled-npm-plugin"
   }
 }

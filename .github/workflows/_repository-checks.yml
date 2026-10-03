@@ -190,9 +190,17 @@ jobs:
 
   deploy-artifact-fixture:
     name: Deployer artifact fixture
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
     uses: ./.github/workflows/deploy-deployer.yml
     with:
       environment: fixture
       working_directory: fixtures/deployer
       deployment_directory: fixtures/deployer
       use_ssh: false
+      artifact_attestation: true
+      attestation_signer_digest: ${{ github.sha }}

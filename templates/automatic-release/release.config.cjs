@@ -26,6 +26,6 @@ module.exports = {
     { name: 'beta', prerelease: true },
     { name: 'alpha', prerelease: true }
   ],
-  tagFormat: '${version}',
+  tagFormat: 'v${version}',
   plugins
 };

@@ -789,6 +789,18 @@
           "default": true,
           "required": false
         },
+        "artifact_attestation": {
+          "description": "Require signed build provenance and SBOM for the exact deployment archive.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "attestation_signer_digest": {
+          "description": "Reviewed full commit SHA of the reusable workflow; required with artifact_attestation.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
         "timeout_minutes": {
           "description": "Job timeout.",
           "type": "number",

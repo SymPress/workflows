@@ -77,6 +77,16 @@ on:
         type: boolean
         default: true
         required: false
+      artifact_attestation:
+        description: Require signed build provenance and SBOM for the exact deployment archive.
+        type: boolean
+        default: false
+        required: false
+      attestation_signer_digest:
+        description: Reviewed full commit SHA of the reusable workflow; required with artifact_attestation.
+        type: string
+        default: ''
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -434,6 +444,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes }}
     outputs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      release_sha256: ${{ steps.release-package.outputs.sha256 }}
     env:
       COMPOSER_NO_DEV: 1
     steps:
@@ -515,7 +526,101 @@ jobs:
             fi
           fi
 
+      - name: Audit production Composer dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: composer --no-plugins audit --locked --no-dev --no-interaction
+
+      - name: Audit Node dependencies
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm audit --audit-level high
+          elif [ -f yarn.lock ]; then
+            if [[ "$(yarn --version)" == 1.* ]]; then
+              report="$(mktemp)"
+              trap 'rm -f "$report"' EXIT
+              set +e
+              yarn audit --json > "$report"
+              result=$?
+              set -e
+              # An absent summary also rejects registry/network failures.
+              python3 - "$report" "$result" <<'PY'
+          import json, sys
+          summaries = [e['data']['vulnerabilities'] for e in
+                       (json.loads(line) for line in open(sys.argv[1])) if e.get('type') == 'auditSummary']
+          if len(summaries) != 1 or int(sys.argv[2]) > 31 or (int(sys.argv[2]) & 24):
+              raise SystemExit('Yarn audit did not establish a passing release gate.')
+          if summaries[0].get('high', 0) or summaries[0].get('critical', 0):
+              raise SystemExit('High or critical Node advisory blocks release.')
+          PY
+            else
+              yarn npm audit --all --recursive --severity high
+            fi
+          else
+            npm audit --audit-level high
+          fi
+
+      - name: Generate production SBOM
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, urllib.parse
+          root = pathlib.Path.cwd().resolve()
+          working = (root / os.environ['WD']).resolve()
+          if not working.is_relative_to(root):
+              raise RuntimeError('Invalid SBOM working directory')
+          components = {}
+          def add(name, version, ecosystem, role):
+              if not isinstance(name, str) or not name or not isinstance(version, str) or not version:
+                  raise RuntimeError('Invalid installed component metadata')
+              purl = 'pkg:' + ecosystem + '/' + urllib.parse.quote(name, safe='/') + '@' + urllib.parse.quote(version, safe='')
+              components[purl] = {'type': 'library', 'name': name, 'version': version, 'bom-ref': purl, 'purl': purl,
+                                  'properties': [{'name': 'sympress:inventory-source', 'value': role}]}
+          installed = working / 'vendor/composer/installed.json'
+          if not installed.is_file() or not installed.resolve().is_relative_to(root):
+              raise RuntimeError('Installed Composer metadata required for SBOM')
+          inventory = json.loads(installed.read_text())
+          packages = inventory.get('packages') if isinstance(inventory, dict) else inventory
+          if not isinstance(packages, list):
+              raise RuntimeError('Invalid Composer inventory')
+          lock = json.loads((working / 'composer.lock').read_text())
+          dev = {p['name'] for p in lock.get('packages-dev', [])}
+          for package in packages:
+              if package.get('name') in dev:
+                  raise RuntimeError('Development package remains in release inventory')
+              add(package.get('name'), package.get('version'), 'composer', 'installed-production-package')
+          node_lock = working / 'package-lock.json'
+          if node_lock.is_file():
+              node = json.loads(node_lock.read_text())
+              if not isinstance(node.get('packages'), dict):
+                  raise RuntimeError('SBOM requires package-lock v2 or v3')
+              for location, package in node['packages'].items():
+                  if not location or package.get('dev') or package.get('link'):
+                      continue
+                  name = package.get('name') or location.rsplit('node_modules/', 1)[-1]
+                  add(name, package.get('version'), 'npm', 'locked-production-build-input')
+          limitations = []
+          if (working / 'package.json').is_file() and not node_lock.is_file():
+              limitations.append({'name': 'sympress:inventory-limitation', 'value': 'Non-npm JavaScript build inputs are not inventoried; Composer production inventory is complete.'})
+          sbom = {'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1,
+                  'metadata': {'component': {'type': 'application', 'name': os.environ['GITHUB_REPOSITORY'],
+                                            'version': os.environ['GITHUB_SHA']}, 'properties': limitations},
+                  'components': [components[k] for k in sorted(components)]}
+          target = root / 'sympress-sbom.cdx.json'
+          if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
+              raise RuntimeError('SBOM output must not alias existing files')
+          target.write_text(json.dumps(sbom, sort_keys=True, indent=2) + '\n')
+          PY
+
       - name: Package release artifact
+        id: release-package
         shell: bash
         env:
           ARTIFACT_KIND: release
@@ -572,6 +677,10 @@ jobs:
           with tarfile.open(target, 'w:gz', dereference=False) as archive:
               archive.add(root, arcname='.', filter=safe)
           PY
+          digest="$(sha256sum "${RUNNER_TEMP}/release.tgz" | cut -d ' ' -f 1)"
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload release artifact
         id: artifact
@@ -582,10 +691,65 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  attest:
+    name: Attest the deployment archive
+    needs: build
+    if: ${{ inputs.artifact_attestation }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download the exact release archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-release
+      - name: Verify archive digest before signing
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.release_sha256 }}
+          SIGNER_DIGEST: ${{ inputs.attestation_signer_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$SIGNER_DIGEST" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::A reviewed attestation_signer_digest is required."; exit 1; }
+          [[ "$EXPECTED_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          actual="$(sha256sum "${RUNNER_TEMP}/sympress-release/release.tgz" | cut -d ' ' -f 1)"
+          test "$actual" = "$EXPECTED_SHA256"
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'sympress-release'
+          with tarfile.open(directory / 'release.tgz') as archive:
+              member = archive.getmember('./sympress-sbom.cdx.json')
+              if not member.isfile() or member.size > 16 * 1024 * 1024:
+                  raise RuntimeError('Invalid SBOM attestation subject')
+              content = archive.extractfile(member).read()
+          sbom = json.loads(content)
+          if sbom.get('bomFormat') != 'CycloneDX' or sbom.get('specVersion') != '1.6':
+              raise RuntimeError('Required CycloneDX SBOM missing')
+          (directory / 'sbom.cdx.json').write_bytes(content)
+          PY
+      - name: Attest release provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/sympress-release/release.tgz
+      - name: Attest release SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/sympress-release/release.tgz
+          sbom-path: ${{ runner.temp }}/sympress-release/sbom.cdx.json
+
   deploy:
     name: Deploy
-    needs: build
+    needs: [build, attest]
+    if: ${{ always() && needs.build.result == 'success' && (!inputs.artifact_attestation || needs.attest.result == 'success') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     timeout-minutes: ${{ inputs.timeout_minutes }}
     environment: ${{ inputs.environment }}
     concurrency:
@@ -604,6 +768,27 @@ jobs:
         with:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-release
+
+      - name: Verify the deployment archive before extraction
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.release_sha256 }}
+          REQUIRE_ATTESTATION: ${{ inputs.artifact_attestation }}
+          SIGNER_DIGEST: ${{ inputs.attestation_signer_digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          archive="${RUNNER_TEMP}/sympress-release/release.tgz"
+          actual="$(sha256sum "$archive" | cut -d ' ' -f 1)"
+          test "$actual" = "$EXPECTED_SHA256"
+          if [ "$REQUIRE_ATTESTATION" = true ]; then
+            [[ "$SIGNER_DIGEST" =~ ^[a-f0-9]{40}$ ]]
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow SymPress/workflows/.github/workflows/deploy-deployer.yml \
+              --signer-digest "$SIGNER_DIGEST" --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF" --deny-self-hosted-runners
+          fi
 
       - name: Restore release artifact
         shell: bash
