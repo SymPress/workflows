@@ -313,6 +313,24 @@ jobs:
             unset COMPOSER_AUTH NODE_AUTH_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND
             test ! -e "$RUNNER_TEMP/composer-deploy-key"
             test ! -e "$RUNNER_TEMP/composer-known-hosts"
+            # Register sniff packages explicitly: the update intentionally skips Composer plugins.
+            vendor_dir="$(composer config vendor-dir)"
+            bin_dir="$(composer config bin-dir)"
+            if [ -x "${bin_dir%/}/phpcs" ]; then
+              # shellcheck disable=SC2016 -- Dollar expressions belong to PHP, not the shell.
+              standard_paths="$(php -r '
+                require $argv[1] . "/autoload.php";
+                $paths = [];
+                foreach (Composer\InstalledVersions::getInstalledPackagesByType("phpcodesniffer-standard") as $package) {
+                    $path = Composer\InstalledVersions::getInstallPath($package);
+                    if ($path !== null && is_dir($path)) {
+                        $paths[] = $path;
+                    }
+                }
+                echo implode(",", $paths);
+              ' "$vendor_dir")"
+              "${bin_dir%/}/phpcs" --config-set installed_paths "$standard_paths"
+            fi
           fi
 
           has_script() {
