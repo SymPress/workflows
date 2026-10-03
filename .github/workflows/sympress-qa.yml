@@ -155,8 +155,6 @@ jobs:
         target: ${{ fromJSON(needs.discover.outputs.targets) }}
     env:
       CI: true
-      COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_REGISTRY_TOKEN }}
       ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
     steps:
       - name: Checkout
@@ -188,7 +186,7 @@ jobs:
       - name: Export custom environment
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
-        if: ${{ matrix.target != '__no_targets__' && env.ENV_VARS_JSON != '' }}
+        if: ${{ matrix.target != '__no_targets__' && !inputs.update_dependencies && env.ENV_VARS_JSON != '' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
@@ -278,11 +276,28 @@ jobs:
           cache: ${{ steps.package-manager.outputs.cache }}
           cache-dependency-path: ${{ steps.package-manager.outputs.lockfile }}
 
+      - name: Fetch current Canary dependencies
+        if: ${{ matrix.target != '__no_targets__' && inputs.update_dependencies }}
+        working-directory: ${{ matrix.target }}
+        shell: bash
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+          COMPOSER_OPTIONS: ${{ inputs.composer_options }}
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/composer-deploy-key" "$RUNNER_TEMP/composer-known-hosts"' EXIT
+          # shellcheck disable=SC2086
+          composer update $COMPOSER_OPTIONS --no-scripts --no-plugins
+          # shellcheck disable=SC2086
+          composer install $COMPOSER_OPTIONS --no-scripts --no-plugins
+
       - name: Run QA
         if: ${{ matrix.target != '__no_targets__' }}
         working-directory: ${{ matrix.target }}
         shell: bash
         env:
+          COMPOSER_AUTH: ${{ !inputs.update_dependencies && secrets.COMPOSER_AUTH_JSON || '' }}
+          NODE_AUTH_TOKEN: ${{ !inputs.update_dependencies && secrets.NPM_REGISTRY_TOKEN || '' }}
           COMPOSER_OPTIONS: ${{ inputs.composer_options }}
           RUN_VALIDATE: ${{ inputs.run_validate }}
           RUN_AUDIT: ${{ inputs.run_audit }}
@@ -294,6 +309,11 @@ jobs:
         run: |
           set -euo pipefail
           export CI=true
+          if [ "${UPDATE_DEPENDENCIES:-false}" = "true" ]; then
+            unset COMPOSER_AUTH NODE_AUTH_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND
+            test ! -e "$RUNNER_TEMP/composer-deploy-key"
+            test ! -e "$RUNNER_TEMP/composer-known-hosts"
+          fi
 
           has_script() {
             local script="$1"
@@ -433,17 +453,14 @@ jobs:
             fi
           }
 
-          if [ "${UPDATE_DEPENDENCIES:-false}" = "true" ]; then
-            # shellcheck disable=SC2086
-            composer update $COMPOSER_OPTIONS
-          fi
-
           if [ "$RUN_VALIDATE" = "true" ]; then
             composer validate --strict --no-check-publish
           fi
 
-          # shellcheck disable=SC2086
-          composer install $COMPOSER_OPTIONS
+          if [ "${UPDATE_DEPENDENCIES:-false}" != "true" ]; then
+            # shellcheck disable=SC2086
+            composer install $COMPOSER_OPTIONS
+          fi
 
           if [ "$RUN_AUDIT" = "true" ]; then
             if [ -f composer.lock ]; then
