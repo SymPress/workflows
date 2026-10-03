@@ -310,6 +310,10 @@ const releaseSteps = parseDocument(release).toJS().jobs['automatic-release'].ste
 assert(stepPosition(releaseSteps, 'Install locked release tooling') < stepPosition(releaseSteps, 'Configure SSH'), 'release tooling must install before SSH auth');
 const ddevWorkflow = parseDocument(read('.github/workflows/ddev-playwright.yml')).toJS();
 const ddevSteps = ddevWorkflow.jobs['ddev-playwright'].steps;
+const checkoutRefInput = ddevWorkflow.on.workflow_call.inputs.checkout_ref;
+assert(checkoutRefInput.type === 'string' && checkoutRefInput.default === '' && checkoutRefInput.required === false, 'DDEV checkout ref must be optional and preserve the caller event by default');
+assert(namedStep(ddevSteps, 'Checkout').with.ref === '${{ inputs.checkout_ref }}', 'DDEV must pass the exact caller-selected release ref to checkout without a main fallback');
+assert(namedStep(ddevSteps, 'Checkout').with['persist-credentials'] === false, 'DDEV release checkout must not persist Git credentials');
 const composerUpdateInput = ddevWorkflow.on.workflow_call.inputs.composer_update;
 assert(composerUpdateInput.type === 'boolean' && composerUpdateInput.default === false && composerUpdateInput.required === false, 'DDEV Composer update must be an optional boolean with a locked-install default');
 assert(namedStep(ddevSteps, 'Install dependencies with private authentication').env.COMPOSER_UPDATE === '${{ inputs.composer_update }}', 'DDEV Composer update input must enter the dependency step through env');

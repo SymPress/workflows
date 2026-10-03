@@ -3,6 +3,11 @@ name: DDEV Playwright
 on:
   workflow_call:
     inputs:
+      checkout_ref:
+        description: Optional checkout ref; empty keeps the caller event ref.
+        type: string
+        default: ''
+        required: false
       php_version:
         description: Optional PHP version to set in DDEV before start.
         type: string
@@ -123,6 +128,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.checkout_ref }}
           persist-credentials: false
 
       - name: Validate custom commands
