@@ -176,7 +176,12 @@ try {
       delete manifest.packageManager; // Legacy repositories choose Yarn solely through yarnPath.
       writeFileSync(path.join(directory, 'package.json'), JSON.stringify(manifest));
       writeFileSync(path.join(directory, '.yarnrc.yml'), `nodeLinker: ${linker}\nyarnPath: .yarn/releases/yarn-4.9.4.cjs\nnpmRegistryServer: https://registry.npmjs.org\nnpmAuthToken: private-artifact-sentinel\n`);
-      command(['yarn', 'install', '--mode=skip-build'], directory, { YARN_ENABLE_GLOBAL_CACHE: 'false', YARN_ENABLE_SCRIPTS: 'false' });
+      // Only this synthetic fixture creates its first lock. Public PR/CI mode
+      // otherwise makes Yarn immutable before the actual workflow is exercised.
+      command(['yarn', 'install', '--mode=skip-build'], directory, {
+        YARN_ENABLE_GLOBAL_CACHE: 'false', YARN_ENABLE_SCRIPTS: 'false',
+        YARN_ENABLE_IMMUTABLE_INSTALLS: 'false', YARN_ENABLE_HARDENED_MODE: 'false',
+      });
     });
   }
   console.log('Passed artifact filtering, relative links, provenance, secret isolation and real pnpm/Yarn PnP/node-modules transitive build round trips.');
