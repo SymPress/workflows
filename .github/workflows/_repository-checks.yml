@@ -89,7 +89,8 @@ jobs:
         run: npm audit --prefix templates/automatic-release --audit-level=moderate
 
       - name: Exercise runner shell failure paths
-        run: npm run test:shell
+        run: |
+          npm run test:shell
           npm run test:artifacts
 
       - name: Exercise canary incident lifecycle

@@ -82,11 +82,32 @@ try {
   checks += 2;
   executable(path.join(root, 'fake-bin/composer'), 'printf "%s\\n" "$1" >> composer-calls; if [ "$1" = update ]; then exit "${UPDATE_EXIT:-0}"; fi; exit 0');
   const updateFlags = { ...flags, RUN_PHPCS: 'false', RUN_PHPSTAN: 'false', RUN_PHPUNIT: 'false', UPDATE_DEPENDENCIES: 'true' };
-  assert.equal(run(qa.run, updateFlags).status, 0);
+  const canaryFetch = step('sympress-qa.yml', 'Fetch current Canary dependencies');
+  assert.equal(run(canaryFetch.run, updateFlags).status, 0);
   assert.deepEqual(readFileSync(path.join(root, 'composer-calls'), 'utf8').trim().split('\n'), ['update', 'install']);
   rmSync(path.join(root, 'composer-calls'));
-  assert.equal(run(qa.run, { ...updateFlags, UPDATE_EXIT: '7' }).status, 7);
+  assert.equal(run(canaryFetch.run, { ...updateFlags, UPDATE_EXIT: '7' }).status, 7);
   assert.deepEqual(readFileSync(path.join(root, 'composer-calls'), 'utf8').trim().split('\n'), ['update']);
+  checks += 2;
+  executable(path.join(root, 'fake-bin/composer'), `
+set -euo pipefail
+test "$COMPOSER_AUTH" = 'canary-fetch-only'
+test "$*" = "$1 --no-scripts --no-plugins"
+test -f "$RUNNER_TEMP/composer-deploy-key"
+exit "\${UPDATE_EXIT:-0}"`);
+  for (const code of [0, 7]) {
+    writeFileSync(path.join(root, 'composer-deploy-key'), 'private-key-probe');
+    writeFileSync(path.join(root, 'composer-known-hosts'), 'private-host-probe');
+    assert.equal(run(canaryFetch.run, { ...updateFlags, COMPOSER_AUTH: 'canary-fetch-only', UPDATE_EXIT: String(code) }).status, code);
+    assert(!existsSync(path.join(root, 'composer-deploy-key')));
+    assert(!existsSync(path.join(root, 'composer-known-hosts')));
+    checks++;
+  }
+  executable(path.join(root, 'fake-bin/composer'), 'test -z "${COMPOSER_AUTH:-}${NODE_AUTH_TOKEN:-}${SSH_AUTH_SOCK:-}${GIT_SSH_COMMAND:-}" || exit 92; test "$1" != install && test "$1" != update || exit 93');
+  assert.equal(run(qa.run, { ...updateFlags, RUN_AUDIT: 'true', COMPOSER_AUTH: 'canary-fetch-only', NODE_AUTH_TOKEN: 'canary-fetch-only', SSH_AUTH_SOCK: '/tmp/private-agent', GIT_SSH_COMMAND: 'private-command' }).status, 0);
+  writeFileSync(path.join(root, 'composer-deploy-key'), 'residual');
+  assert.equal(run(qa.run, updateFlags).status, 1, 'Canary QA must reject residual fetch key files');
+  rmSync(path.join(root, 'composer-deploy-key'));
   checks += 2;
   // A fake install tool confirms secrets exist only during fetch and private files
   // are removed by the actual dependency-step EXIT trap, including failures.

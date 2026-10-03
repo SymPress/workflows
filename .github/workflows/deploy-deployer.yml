@@ -768,6 +768,94 @@ jobs:
     env:
       COMPOSER_NO_DEV: 1
     steps:
+      - name: Checkout trusted deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: sympress-trusted-deployment
+          persist-credentials: false
+
+      - name: Validate trusted deployment directory
+        id: trusted-source
+        shell: bash
+        env:
+          DEPLOYMENT_DIRECTORY: ${{ inputs.deployment_directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, subprocess
+          root = pathlib.Path('sympress-trusted-deployment').resolve(strict=True)
+          if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != os.environ['GITHUB_SHA']:
+              raise RuntimeError('Deployment source commit mismatch')
+          requested = pathlib.PurePosixPath(os.environ['DEPLOYMENT_DIRECTORY'])
+          if requested.is_absolute() or '..' in requested.parts:
+              raise RuntimeError('Deployment directory must remain inside the trusted checkout')
+          directory = root.joinpath(requested)
+          if directory.resolve(strict=True) != directory or not directory.is_dir():
+              raise RuntimeError('Deployment directory must not contain symlinks')
+          for name in ['composer.json', 'composer.lock', 'deploy.php']:
+              file = directory / name
+              if not file.is_file() or file.is_symlink() or file.stat().st_nlink != 1:
+                  raise RuntimeError('Regular trusted deployment source required: ' + name)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('directory=' + str(directory) + '\n')
+          PY
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Install trusted deployment dependencies
+        working-directory: ${{ steps.trusted-source.outputs.directory }}
+        shell: bash
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH_JSON }}
+          INSTALL_SSH_KEY: ${{ secrets.INSTALL_SSH_KEY }}
+          INSTALL_SSH_KNOWN_HOSTS: ${{ secrets.INSTALL_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_dir="$(mktemp -d)"
+          trap 'rm -rf "$auth_dir"' EXIT
+          if [ -n "$INSTALL_SSH_KEY" ]; then
+            test -n "$INSTALL_SSH_KNOWN_HOSTS" || { echo "::error::Verified install host keys required."; exit 1; }
+            printf '%s\n' "$INSTALL_SSH_KEY" > "$auth_dir/key"
+            printf '%s\n' "$INSTALL_SSH_KNOWN_HOSTS" > "$auth_dir/known_hosts"
+            while IFS= read -r host_key || [ -n "$host_key" ]; do
+              [[ "$host_key" =~ ^[[:space:]]*(#|$) ]] && continue
+              printf '%s\n' "$host_key" | ssh-keygen -l -f /dev/stdin >/dev/null
+            done < "$auth_dir/known_hosts"
+            ssh-keygen -l -f "$auth_dir/known_hosts" >/dev/null
+            export GIT_SSH_COMMAND="ssh -i $auth_dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$auth_dir/known_hosts"
+          fi
+          composer --no-plugins validate --strict --no-check-publish
+          composer install --prefer-dist --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts --no-plugins
+
+      - name: Verify trusted deployment tools
+        shell: bash
+        env:
+          TRUSTED_DEPLOYMENT_DIRECTORY: ${{ steps.trusted-source.outputs.directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib
+          root = pathlib.Path('sympress-trusted-deployment').resolve(strict=True)
+          directory = pathlib.Path(os.environ['TRUSTED_DEPLOYMENT_DIRECTORY'])
+          if directory.resolve(strict=True) != directory or not directory.is_relative_to(root):
+              raise RuntimeError('Deployment tools escaped the trusted checkout')
+          for name in ['deploy.php', 'vendor/bin/dep', 'vendor/deployer/deployer/bin/dep']:
+              file = directory / name
+              if not file.is_file() or file.is_symlink() or file.stat().st_nlink != 1 or not file.resolve(strict=True).is_relative_to(root):
+                  raise RuntimeError('Regular trusted deployment tool required: ' + name)
+          for file in directory.rglob('*'):
+              if file.is_symlink() and not file.resolve(strict=True).is_relative_to(root):
+                  raise RuntimeError('Deployment dependency link escaped the trusted checkout')
+          PY
+
       - name: Download release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -796,6 +884,7 @@ jobs:
           fi
 
       - name: Restore release artifact
+        id: release-payload
         shell: bash
         env:
           ARTIFACT_KIND: release
@@ -803,7 +892,8 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json, os, pathlib, tarfile
-          root = pathlib.Path.cwd()
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'sympress-release-payload'
+          root.mkdir(mode=0o700)
           kind = os.environ['ARTIFACT_KIND']
           source = pathlib.Path(os.environ['RUNNER_TEMP']) / ('sympress-' + kind) / (kind + '.tgz')
           with tarfile.open(source) as archive:
@@ -811,15 +901,9 @@ jobs:
           metadata = json.loads((root / '.sympress-artifact.json').read_text())
           if metadata != {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}:
               raise RuntimeError('Artifact provenance mismatch')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('directory=' + str(root.resolve(strict=True)) + '\n')
           PY
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
-        with:
-          php-version: ${{ inputs.php_version }}
-          extensions: ${{ inputs.php_extensions }}
-          tools: composer:v2, ${{ inputs.php_tools }}
-          coverage: none
 
       - name: Install WireGuard tooling
         env:
@@ -874,7 +958,7 @@ jobs:
 
       - name: Run Deployer
         id: run-deployer
-        working-directory: ${{ inputs.deployment_directory }}
+        working-directory: ${{ steps.trusted-source.outputs.directory }}
         shell: bash
         env:
           DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
@@ -884,6 +968,7 @@ jobs:
           DEPLOY_VERBOSITY: ${{ inputs.verbosity }}
           DEPLOY_COMMAND: ${{ inputs.deploy_command }}
           ALLOW_CUSTOM_DEPLOY_COMMAND: ${{ inputs.allow_custom_deploy_command }}
+          SYMPRESS_RELEASE_DIRECTORY: ${{ steps.release-payload.outputs.directory }}
         run: |
           set -euo pipefail
           umask 077

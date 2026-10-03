@@ -289,6 +289,19 @@ assert(!namedStep(deploySteps, 'Build Node assets'), 'deployment secrets must ne
 assert(namedStep(deploySteps, 'Run Deployer')['continue-on-error'] !== true, 'deploy preflight failure must fail naturally');
 assert(namedStep(deploySteps, 'Fail on Deployer result').run.includes('OUTCOME'), 'deploy final guard must require successful outcome');
 assert(namedStep(deploySteps, 'Run Deployer').run.includes('statuses=("${PIPESTATUS[@]}")'), 'deploy must preserve deploy and tee exit statuses');
+assert(namedStep(deploySteps, 'Checkout trusted deployment source').with.ref === '${{ github.sha }}', 'deployment code must come from the exact tested caller commit');
+assert(namedStep(deploySteps, 'Checkout trusted deployment source').with.path === 'sympress-trusted-deployment', 'trusted deployment checkout must be isolated from artifact extraction');
+assert(namedStep(deploySteps, 'Run Deployer')['working-directory'] === '${{ steps.trusted-source.outputs.directory }}', 'Deployer must execute in the verified trusted directory');
+assert(namedStep(deploySteps, 'Run Deployer').env.SYMPRESS_RELEASE_DIRECTORY === '${{ steps.release-payload.outputs.directory }}', 'trusted recipes must receive the separate upload payload');
+assert(namedStep(deploySteps, 'Restore release artifact').run.includes("'sympress-release-payload'"), 'release extraction must target a separate payload directory');
+assert(namedStep(deploySteps, 'Install trusted deployment dependencies').run.includes('--no-scripts --no-plugins'), 'fresh deployment install must disable scripts and plugins');
+for (const name of ['Configure SSH known hosts', 'Set up SSH', 'Set up WireGuard']) {
+  assert(stepPosition(deploySteps, 'Verify trusted deployment tools') < stepPosition(deploySteps, name), `trusted deployment tools must be verified before ${name}`);
+}
+const canaryQa = parseDocument(read('.github/workflows/sympress-qa.yml')).toJS().jobs.qa;
+assert(!canaryQa.env.COMPOSER_AUTH && !canaryQa.env.NODE_AUTH_TOKEN, 'QA authentication must not be job-wide');
+assert(namedStep(canaryQa.steps, 'Fetch current Canary dependencies').run.includes('--no-scripts --no-plugins'), 'updated Canary dependencies cannot execute during authenticated fetch');
+assert(namedStep(canaryQa.steps, 'Export custom environment').if.includes('!inputs.update_dependencies'), 'Canary QA must not export caller secrets');
 for (const name of ['Install project dependencies', 'Install deployment dependencies']) {
   assert(namedStep(dependencySteps, name).run.includes('--no-scripts --no-plugins'), 'Composer fetch must not execute code with credentials');
 }
@@ -314,6 +327,7 @@ assert(qit.includes('QIT_TEST'), 'woo-qit.yml must pass qit_test through env');
 assert(qit.includes('args=("run:${QIT_TEST}"'), 'woo-qit.yml must run QIT with an argv array');
 
 const repositoryChecks = read('.github/workflows/_repository-checks.yml');
+assert(parseDocument(repositoryChecks).toJS().jobs.contracts.steps.find(step => step.name === 'Exercise runner shell failure paths').run.includes('npm run test:shell\nnpm run test:artifacts'), 'hosted contracts must execute artifact regressions as a separate command');
 assert(repositoryChecks.includes('zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482'), '_repository-checks.yml must pin zizmor');
 assert(repositoryChecks.includes('npm run test:contracts'), '_repository-checks.yml must run contract tests');
 assert(repositoryChecks.includes('npm run doctor -- --fail-on high fixtures/wp-plugin'), '_repository-checks.yml must run the doctor fixture gate');

@@ -23,7 +23,8 @@ try {
     writeFileSync(path.join(source, name), 'private-artifact-sentinel');
   }
   writeFileSync(path.join(source, '.env.example'), 'PUBLIC_PLACEHOLDER=true');
-  const env = { ...process.env, GITHUB_SHA: 'abcdef0123456789', GITHUB_RUN_ID: 'fixture-run', RUNNER_TEMP: runner };
+  const env = { ...process.env, GITHUB_SHA: 'abcdef0123456789', GITHUB_RUN_ID: 'fixture-run', RUNNER_TEMP: runner,
+    GITHUB_OUTPUT: path.join(root, 'step-output') };
   const run = (job, name, cwd, kind, overrides = {}) => spawnSync('bash', ['-c', step(job, name)], {
     cwd, env: { ...env, ARTIFACT_KIND: kind, ...overrides }, encoding: 'utf8', timeout: 60000,
   });
@@ -48,11 +49,15 @@ try {
   assert.equal(spawnSync('cp', [path.join(runner, 'release.tgz'), path.join(runner, 'sympress-release')]).status, 0);
   result = run('deploy', 'Restore release artifact', deploy, 'release');
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(path.join(deploy, 'dist/build.txt'), 'utf8'), 'verified-build');
-  assert(lstatSync(path.join(deploy, 'vendor/bin/library')).isSymbolicLink());
-  for (const name of ['.env.example', '.env.generated', 'auth.json', '.npmrc']) assert(!existsSync(path.join(deploy, name)));
+  const payload = path.join(runner, 'sympress-release-payload');
+  assert.equal(readFileSync(path.join(payload, 'dist/build.txt'), 'utf8'), 'verified-build');
+  assert(lstatSync(path.join(payload, 'vendor/bin/library')).isSymbolicLink());
+  for (const name of ['.env.example', '.env.generated', 'auth.json', '.npmrc']) assert(!existsSync(path.join(payload, name)));
+  assert(!existsSync(path.join(deploy, 'dist')), 'Release extraction must not write to the executable workspace');
+  rmSync(payload, { recursive: true });
   result = run('deploy', 'Restore release artifact', deploy, 'release', { GITHUB_SHA: 'different-commit' });
   assert.notEqual(result.status, 0, 'Different commit must fail provenance');
+  assert.match(result.stderr, /Artifact provenance mismatch/);
   for (const privateName of ['auth.json', '.env', '.env.production', '.npmrc', '.yarnrc.yml']) {
     symlinkSync(privateName, path.join(source, 'public-alias.json'));
     result = run('dependencies', 'Package dependencies artifact', source, 'dependencies');
@@ -148,9 +153,11 @@ try {
     copyFileSync(path.join(temp, 'release.tgz'), path.join(temp, 'sympress-release/release.tgz'));
     output = run('deploy', 'Restore release artifact', deployed, 'release', overrides);
     assert.equal(output.status, 0, output.stderr);
-    assert.equal(readFileSync(path.join(deployed, 'dist/result.txt'), 'utf8'), 'transitive-build');
-    assert(!existsSync(path.join(deployed, '.yarnrc.yml')));
-    assert(!existsSync(path.join(deployed, 'node_modules')));
+    const payload = path.join(temp, 'sympress-release-payload');
+    assert.equal(readFileSync(path.join(payload, 'dist/result.txt'), 'utf8'), 'transitive-build');
+    assert(!existsSync(path.join(payload, '.yarnrc.yml')));
+    assert(!existsSync(path.join(payload, 'node_modules')));
+    assert(!existsSync(path.join(deployed, 'dist')));
   };
   const packageFiles = (directory, packageManager) => {
     writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ private: true, name: 'artifact-manager-fixture', packageManager,

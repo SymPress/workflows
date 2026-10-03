@@ -57,12 +57,25 @@ Outputs exposed to caller workflows:
 The workflow uses isolated fetch, build and deploy jobs. `dependencies` installs the project and
 Deployer locks with scripts and plugins disabled and fetch-only credentials.
 `build` restores that run's artifact and runs application build scripts without
-any operator secrets or deployment environment. `deploy` restores the built
-artifact by its exact ID, verifies its source commit and run, then loads SSH
-and optional WireGuard credentials. Secret files, authentication configuration,
+any operator secrets or deployment environment. `deploy` checks out the exact
+tested caller commit into a separate trusted source directory and installs its
+deployment lock with scripts/plugins disabled and fetch-only authentication.
+It verifies the recipe, regular Deployer proxy and dependency paths before loading
+SSH or WireGuard credentials. Artifact files cannot overwrite this checkout.
+The built archive is downloaded by its exact ID and verified before extraction
+into a new directory outside the executable workspace. Secret files, authentication configuration,
 VCS metadata and private caches are excluded. Internal relative symlinks retain
 pnpm's dependency resolution; absolute or external links and links or hardlinks
 to private files fail packaging. Restores use Python's `data` extraction filter.
+
+Deployment recipes run from the trusted checkout. Use the absolute
+`SYMPRESS_RELEASE_DIRECTORY` environment variable as the upload source, for example
+`upload(getenv('SYMPRESS_RELEASE_DIRECTORY') . '/', '{{release_path}}')`.
+Treat files in that directory as upload data: do not include PHP files from it,
+load its Composer autoloader, or run its local commands with deployment credentials.
+Remote application PHP execution remains part of the deployment recipe's scope.
+For standalone Deployer usage, a recipe may fall back to its usual local source
+when this environment variable is absent.
 
 Modern Yarn uses a workspace-local cache so PnP dependencies survive the job
 boundary. The dependency artifact replaces `.yarnrc.yml` with only public
@@ -75,6 +88,9 @@ The default SSH transport requires `GITHUB_USER_SSH_KEY` at runtime.
 Set `use_ssh: false` only for Deployer recipes using local or non-SSH hosts.
 The repository's local Deployer fixture exercises these jobs and
 checks that build output reaches deployment while inert credential files do not.
+Its build also tampers with the artifact recipe, verification script and both
+Deployer binary paths. Deployment succeeds using freshly installed trusted tools
+and trusted verification code that reads the built payload as data.
 
 ## Release inventory and verification
 
