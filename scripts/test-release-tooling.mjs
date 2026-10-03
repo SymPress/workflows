@@ -27,10 +27,11 @@ const run = (command, args, cwd, env = process.env) => {
   return result;
 };
 try {
-  for (const file of ['package.json', 'package-lock.json', 'run-release.mjs', 'github-auth-plugin.mjs']) {
+  for (const file of ['package.json', 'package-lock.json', 'run-release.mjs', 'github-auth-plugin.mjs', 'sympress-bounded-braces-1.0.0.tgz']) {
     copyFileSync(path.join('templates/automatic-release', file), path.join(tools, file));
   }
   cpSync('templates/automatic-release/disabled-npm-plugin', path.join(tools, 'disabled-npm-plugin'), { recursive: true });
+  cpSync('templates/automatic-release/bounded-braces', path.join(tools, 'bounded-braces'), { recursive: true });
   run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], tools);
   run('npm', ['audit', '--audit-level=moderate'], tools);
   assert.equal(JSON.parse(readFileSync(path.join(tools, 'node_modules/@sympress/release-disabled-npm-plugin/package.json'), 'utf8')).name, '@sympress/release-disabled-npm-plugin');
@@ -89,7 +90,7 @@ try {
     const result = run('node', [path.join(tools, 'run-release.mjs')], cwd, { ...fixtureEnvironment, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, RELEASE_CONFIG: 'release.config.cjs', SYMPRESS_RELEASE_DRY_RUN: 'true', GITHUB_TOKEN: 'canary-token', SYMPRESS_RELEASE_TOKEN: 'canary-token' });
     assert.match(result.stdout + result.stderr, /dry-run/);
     assert.match(result.stdout + result.stderr, /next release version is 1\.0\.0/);
-    const expectedTag = variant === 'fallback' ? '1.0.0' : 'v1.0.0';
+    const expectedTag = 'v1.0.0';
     assert((result.stdout + result.stderr).includes(`Skip ${expectedTag} tag creation in dry-run mode`));
     assert.doesNotMatch(result.stdout + result.stderr, /triggered by a pull request/);
     assert.equal(run('git', ['tag', '--list'], cwd, fixtureEnvironment).stdout.trim(), '');

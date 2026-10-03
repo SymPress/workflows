@@ -54,7 +54,7 @@ Outputs exposed to caller workflows:
 | `deploy_warnings` | Retained compatibility output; empty. |
 | `deploy_log_excerpt` | Retained compatibility output; empty. |
 
-The workflow uses three isolated jobs. `dependencies` installs the project and
+The workflow uses isolated fetch, build and deploy jobs. `dependencies` installs the project and
 Deployer locks with scripts and plugins disabled and fetch-only credentials.
 `build` restores that run's artifact and runs application build scripts without
 any operator secrets or deployment environment. `deploy` restores the built
@@ -73,5 +73,47 @@ omits this configuration and `node_modules` after the build.
 
 The default SSH transport requires `GITHUB_USER_SSH_KEY` at runtime.
 Set `use_ssh: false` only for Deployer recipes using local or non-SSH hosts.
-The repository's local Deployer fixture exercises the same three jobs and
+The repository's local Deployer fixture exercises these jobs and
 checks that build output reaches deployment while inert credential files do not.
+
+## Release inventory and verification
+
+The build audits the locked production Composer dependencies and rejects high or
+critical Node advisories before packaging. Every archive includes
+`sympress-sbom.cdx.json` in CycloneDX 1.6 format, derived from installed Composer
+packages. Installed development packages fail the build. npm lockfile v2/v3
+production inputs are included; Yarn/pnpm JavaScript inventories are explicitly
+marked incomplete in the SBOM. Review those inventories separately before a release.
+
+The build exports the SHA-256 of the final archive. Deployment compares the
+downloaded bytes with this job output before opening the tar file. The checksum
+is not read from a file supplied by the archive.
+
+For public production repositories, enable both provenance and SBOM attestations:
+
+```yml
+permissions:
+  contents: read
+  actions: read
+  attestations: write
+  id-token: write
+jobs:
+  deploy:
+    uses: SymPress/workflows/.github/workflows/deploy-deployer.yml@REVIEWED_40_CHARACTER_COMMIT
+    with:
+      artifact_attestation: true
+      attestation_signer_digest: REVIEWED_40_CHARACTER_COMMIT
+```
+
+Replace both placeholders with the same reviewed workflow commit. A separate job
+signs the archive's exact digest without deployment credentials. Deployment uses
+`gh attestation verify` and requires the reusable signer workflow, its full commit,
+the caller's source commit/ref, and a GitHub-hosted runner. Verification failure
+stops extraction and deployment. No additional human approver is required by this
+workflow. Consumers may opt out only when their hosting plan cannot provide
+attestations; archive digest and audit gates still apply.
+
+GitHub requires Enterprise Cloud for attestations of private repositories. This
+workflow does not publish private packages or grant them to public consumers.
+See [GitHub's attestation action](https://github.com/actions/attest) and the
+[verification command](https://cli.github.com/manual/gh_attestation_verify).
