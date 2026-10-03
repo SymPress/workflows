@@ -13,6 +13,7 @@ jobs:
 
 The workflow supports:
 
+- optional `checkout_ref` to select a tag, commit, or branch;
 - DDEV PHP and Node version overrides;
 - host and DDEV environment variables from JSON secrets;
 - private install-only Composer, npm, and SSH authentication;
@@ -42,6 +43,19 @@ an update in that step cannot access the removed installation credentials.
 Projects using Composer installer plugins also need a subsequent
 `composer install` with allowed plugins enabled to place packages in their
 configured project paths.
+
+For a scheduled or manual update canary, set `checkout_ref` to the published
+release baseline so the test runs against released application code:
+
+```yml
+with:
+  checkout_ref: v1.1.2
+  composer_update: true
+```
+
+The selected ref must exist; checkout fails if it is unavailable. Omitting
+`checkout_ref` or setting it to `''` preserves the caller event checkout used by
+normal pull-request and push checks.
 
 Container installation reads a temporary literal script from the private mount
 with raw DDEV execution. The install trap also removes that script. Optional

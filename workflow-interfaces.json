@@ -568,6 +568,12 @@
       "id": "ddev-playwright",
       "file": ".github/workflows/ddev-playwright.yml",
       "inputs": {
+        "checkout_ref": {
+          "description": "Optional checkout ref; empty keeps the caller event ref.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
         "php_version": {
           "description": "Optional PHP version to set in DDEV before start.",
           "type": "string",
