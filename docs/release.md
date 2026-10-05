@@ -59,3 +59,27 @@ See [Release Strategy](release-strategy.md).
 
 Release tooling has a separate moderate-severity audit gate. Do not publish a new
 workflow tag while that gate fails.
+
+The locked toolchain pairs Conventional Commits preset `10.4.0` with the official
+`@semantic-release/release-notes-generator` prerelease `15.0.0-beta.3`. Its declared
+Writer 9 dependency supports the preset's render functions. Stable generator
+`14.1.1` still uses Writer 8 and fails when generating notes with preset 10. The
+prerelease is an exact pin, with no forced writer override. See the
+[upstream migration](https://github.com/semantic-release/release-notes-generator/releases/tag/v15.0.0-beta.2)
+and [beta.3 release](https://github.com/semantic-release/release-notes-generator/releases/tag/v15.0.0-beta.3).
+
+Use Node `^22.22.2` or `>=24.15`; the default Node 24 setup selects a supported
+release. Native preset support covers `angular` and `conventionalcommits`, and
+the omitted-preset default remains Angular. Consumers with custom `writerOpts`
+must migrate Handlebars template strings to
+[Writer 9 render functions](https://conventional-changelog.js.org/changelog-writer/).
+Preset 10 also replaces `presetConfig.types[].hidden` and `bumpStrict` with
+`effect`; review any custom preset configuration before adopting this toolchain.
+
+`npm run test:release` executes the workflow's real tooling copy and locked
+installation, then checks native patch, minor and breaking-change notes, GitHub
+links and the Angular default. Local semantic-release dry runs exercise both
+fallback and consumer configurations with the real notes plugin and local Git
+remotes. Release credentials and publication hooks are excluded from the fixture;
+it proves generation and orchestration, while hosted release permissions still
+need the consumer branch check described in the maintainer guide.
