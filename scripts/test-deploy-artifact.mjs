@@ -25,6 +25,15 @@ try {
   writeFileSync(path.join(source, '.env.example'), 'PUBLIC_PLACEHOLDER=true');
   const env = { ...process.env, GITHUB_SHA: 'abcdef0123456789', GITHUB_RUN_ID: 'fixture-run', RUNNER_TEMP: runner,
     GITHUB_OUTPUT: path.join(root, 'step-output') };
+  const composerCache = path.join(runner, 'sympress-composer-cache');
+  mkdirSync(path.join(composerCache, 'files/private/plugin'), { recursive: true });
+  writeFileSync(path.join(composerCache, 'files/private/plugin/archive.zip'), 'package-archive');
+  mkdirSync(path.join(composerCache, 'repo'), { recursive: true });
+  writeFileSync(path.join(composerCache, 'repo/packages.json'), 'private-artifact-sentinel');
+  const gitCache = path.join(composerCache, 'vcs/private-plugin.git');
+  assert.equal(spawnSync('git', ['init', '--bare', gitCache]).status, 0);
+  writeFileSync(path.join(gitCache, 'config'), '[core]\n bare = true\n[remote "origin"]\n url = https://private-artifact-sentinel@example.invalid/repo\n');
+  writeFileSync(path.join(gitCache, 'hooks/pre-fetch'), 'private-artifact-sentinel');
   const run = (job, name, cwd, kind, overrides = {}) => spawnSync('bash', ['-c', step(job, name)], {
     cwd, env: { ...env, ARTIFACT_KIND: kind, ...overrides }, encoding: 'utf8', timeout: 60000,
   });
@@ -36,6 +45,11 @@ try {
   result = run('build', 'Restore dependencies artifact', build, 'dependencies');
   assert.equal(result.status, 0, result.stderr);
   assert(existsSync(path.join(build, '.env.example')));
+  assert.equal(readFileSync(path.join(build, '.sympress-composer-cache/files/private/plugin/archive.zip'), 'utf8'), 'package-archive');
+  assert(!existsSync(path.join(build, '.sympress-composer-cache/repo')));
+  assert(!existsSync(path.join(build, '.sympress-composer-cache/vcs/private-plugin.git/hooks')));
+  assert(!readFileSync(path.join(build, '.sympress-composer-cache/vcs/private-plugin.git/config'), 'utf8').includes('private-artifact-sentinel'));
+  assert.equal(spawnSync('git', ['--git-dir', path.join(build, '.sympress-composer-cache/vcs/private-plugin.git'), 'rev-parse', '--is-bare-repository'], { encoding: 'utf8' }).stdout.trim(), 'true');
   for (const name of ['.env', '.env.production', 'auth.json', '.npmrc', '.yarnrc.yml']) assert(!existsSync(path.join(build, name)));
   assert.equal(readFileSync(path.join(build, 'vendor/bin/library'), 'utf8'), '<?php echo "fixture";');
   assert.equal(readFileSync(path.join(build, 'vendor/library-copy.php'), 'utf8'), '<?php echo "fixture";');
@@ -50,6 +64,7 @@ try {
   result = run('deploy', 'Restore release artifact', deploy, 'release');
   assert.equal(result.status, 0, result.stderr);
   const payload = path.join(runner, 'sympress-release-payload');
+  assert(!existsSync(path.join(payload, '.sympress-composer-cache')), 'Build download caches must not reach the server');
   assert.equal(readFileSync(path.join(payload, 'dist/build.txt'), 'utf8'), 'verified-build');
   assert(lstatSync(path.join(payload, 'vendor/bin/library')).isSymbolicLink());
   for (const name of ['.env.example', '.env.generated', 'auth.json', '.npmrc']) assert(!existsSync(path.join(payload, name)));

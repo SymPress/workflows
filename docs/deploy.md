@@ -5,7 +5,7 @@ Use `deploy-deployer.yml` when a repository has a Deployer setup.
 ```yml
 jobs:
   deploy:
-    uses: sympress/workflows/.github/workflows/deploy-deployer.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/deploy-deployer.yml@8d06f7038c1137e0d720e29d69eff5ce7b5ee488
     with:
       environment: production
       deployment_directory: deployment
@@ -30,6 +30,13 @@ scripts. Yarn 1 uses `--frozen-lockfile --ignore-scripts`; Yarn 2 uses `--immuta
 separate step without install tokens or an SSH agent. Any required Composer
 post-install/plugin work must be explicitly moved to an authorized credential-free
 build step before adopting this workflow.
+
+The dependency artifact includes downloaded Composer archives and a sanitized
+Git object cache for source-only private packages. It excludes authentication,
+repository metadata, Git remotes and hooks. Composer reinstallation in the build
+step uses this cache with networking disabled; no install secret or SSH agent is
+available. A missing cached package fails the build instead of requesting credentials.
+The final release artifact excludes these download caches.
 
 WireGuard is supported through the `WIREGUARD_CONFIGURATION` secret.
 
