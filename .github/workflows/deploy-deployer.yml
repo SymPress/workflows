@@ -151,6 +151,10 @@ jobs:
       COMPOSER_NO_DEV: 1
       ALLOW_UNPINNED_NODE_INSTALL: ${{ inputs.allow_unpinned_node_install }}
     steps:
+      - name: Set isolated Composer fetch cache
+        shell: bash
+        run: echo "COMPOSER_CACHE_DIR=${RUNNER_TEMP}/sympress-composer-cache" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -344,7 +348,7 @@ jobs:
           root = pathlib.Path.cwd()
           kind = os.environ['ARTIFACT_KIND']
           target = pathlib.Path(os.environ['RUNNER_TEMP']) / (kind + '.tgz')
-          excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
+          excluded = {'.git', '.ssh', '.npm', '.cache', '.sympress-composer-cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
           if kind == 'release':
               excluded.add('node_modules')
           def private(parts):
@@ -421,6 +425,48 @@ jobs:
                       yarn_config[setting] = os.path.relpath(resolved, working)
           with tarfile.open(target, 'w:gz', dereference=False) as archive:
               archive.add(root, arcname='.', filter=safe)
+              # Reinstallation by Composer installers must work without credentials.
+              # Copy package bytes only, never repository metadata, remotes or hooks.
+              cache = pathlib.Path(os.environ.get('COMPOSER_CACHE_DIR', str(pathlib.Path(os.environ['RUNNER_TEMP']) / 'sympress-composer-cache')))
+              def cache_file(path, relative, git_object=False):
+                  if path.is_symlink() or not path.is_file() or (path.stat().st_nlink != 1 and not git_object):
+                      raise RuntimeError('Composer cache entry must be a regular unlinked file: ' + str(relative))
+                  if any(parent.is_symlink() for parent in path.parents):
+                      raise RuntimeError('Composer cache directory must not be a symlink')
+                  # Git clones legitimately hardlink immutable objects. Serialize bytes,
+                  # never links, so the artifact cannot acquire an external alias.
+                  info = tarfile.TarInfo('.sympress-composer-cache/' + relative.as_posix())
+                  info.size = path.stat().st_size
+                  info.mode, info.uid, info.gid, info.uname, info.gname = 0o600, 0, 0, '', ''
+                  with path.open('rb') as content:
+                      archive.addfile(info, content)
+              if (cache / 'files').is_dir():
+                  for path in sorted((cache / 'files').rglob('*')):
+                      if path.is_file() or path.is_symlink():
+                          cache_file(path, path.relative_to(cache))
+              if (cache / 'vcs').is_dir():
+                  for repository in sorted((cache / 'vcs').iterdir()):
+                      if repository.is_symlink() or not repository.is_dir():
+                          raise RuntimeError('Invalid Composer Git cache directory')
+                      for name in ['HEAD', 'packed-refs', 'shallow']:
+                          path = repository / name
+                          if path.exists() or path.is_symlink():
+                              cache_file(path, path.relative_to(cache))
+                      for name in ['objects', 'refs']:
+                          info = tarfile.TarInfo('.sympress-composer-cache/vcs/' + repository.name + '/' + name)
+                          info.type, info.mode = tarfile.DIRTYPE, 0o700
+                          archive.addfile(info)
+                          for path in sorted((repository / name).rglob('*')):
+                              relative = path.relative_to(repository)
+                              # Alternate object stores could escape the cache boundary.
+                              if relative.parts[:2] == ('objects', 'info'):
+                                  continue
+                              if path.is_file() or path.is_symlink():
+                                  cache_file(path, path.relative_to(cache), git_object=name == 'objects')
+                      content = b'[core]\n\trepositoryformatversion = 0\n\tbare = true\n'
+                      info = tarfile.TarInfo('.sympress-composer-cache/vcs/' + repository.name + '/config')
+                      info.size, info.mode = len(content), 0o600
+                      archive.addfile(info, io.BytesIO(content))
               if yarn_config is not None:
                   content = json.dumps(yarn_config).encode()
                   info = tarfile.TarInfo((working.relative_to(root) / '.yarnrc.yml').as_posix())
@@ -447,6 +493,7 @@ jobs:
       release_sha256: ${{ steps.release-package.outputs.sha256 }}
     env:
       COMPOSER_NO_DEV: 1
+      COMPOSER_CACHE_DIR: ${{ github.workspace }}/.sympress-composer-cache
     steps:
       - name: Download dependencies artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -513,6 +560,7 @@ jobs:
         shell: bash
         env:
           BUILD_SCRIPT: ${{ inputs.build_script }}
+          COMPOSER_DISABLE_NETWORK: '1'
         run: |
           set -euo pipefail
           unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
@@ -634,7 +682,7 @@ jobs:
           root = pathlib.Path.cwd()
           kind = os.environ['ARTIFACT_KIND']
           target = pathlib.Path(os.environ['RUNNER_TEMP']) / (kind + '.tgz')
-          excluded = {'.git', '.ssh', '.npm', '.cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
+          excluded = {'.git', '.ssh', '.npm', '.cache', '.sympress-composer-cache', 'operations-state', 'auth.json', '.npmrc', '.yarnrc.yml'}
           if kind == 'release':
               excluded.add('node_modules')
           def private(parts):
