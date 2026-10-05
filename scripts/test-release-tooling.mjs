@@ -65,9 +65,11 @@ try {
     assert(notes.includes(fixture.version));
     assert.match(notes, new RegExp(`###[^\n]*${fixture.section}`));
     assert(notes.includes(fixture.subject));
-    assert(notes.includes(`https://github.com/example/fixture/compare/v1.0.0...v${fixture.version}`));
-    assert(notes.includes(`https://github.com/example/fixture/commit/${hash}`));
-    if (fixture.name === 'patch') assert(notes.includes('https://github.com/example/fixture/issues/12'));
+    const links = [...notes.matchAll(/\]\((https:\/\/[^)\s]+)\)/g)].map(([, href]) => new URL(href));
+    const hasLink = pathname => links.some(link => link.origin === 'https://github.com' && link.pathname === pathname);
+    assert(hasLink(`/example/fixture/compare/v1.0.0...v${fixture.version}`));
+    assert(hasLink(`/example/fixture/commit/${hash}`));
+    if (fixture.name === 'patch') assert(hasLink('/example/fixture/issues/12'));
     if (fixture.name === 'breaking') assert(notes.includes('legacy mode has been removed'));
     assert.doesNotMatch(notes, /Missing helper|requires conventional-changelog-writer/);
     console.log(`Passed native ${fixture.name} analysis and release notes for ${fixture.version}.`);
