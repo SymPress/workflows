@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, copyFileSync, cpSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { parseDocument } from 'yaml';
 
 const root = mkdtempSync(path.join(tmpdir(), 'sympress-release-tooling-'));
-const tools = path.join(root, 'tools');
-mkdirSync(tools);
+const tools = path.join(root, 'sympress-release-tools');
 const fixtureHome = path.join(root, 'home');
 mkdirSync(fixtureHome);
 // Build a local-only fixture environment rather than inheriting hosted PR/CI
@@ -27,13 +28,61 @@ const run = (command, args, cwd, env = process.env) => {
   return result;
 };
 try {
-  for (const file of ['package.json', 'package-lock.json', 'run-release.mjs', 'github-auth-plugin.mjs', 'sympress-bounded-braces-1.0.0.tgz']) {
-    copyFileSync(path.join('templates/automatic-release', file), path.join(tools, file));
-  }
-  cpSync('templates/automatic-release/disabled-npm-plugin', path.join(tools, 'disabled-npm-plugin'), { recursive: true });
-  cpSync('templates/automatic-release/bounded-braces', path.join(tools, 'bounded-braces'), { recursive: true });
-  run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], tools);
+  // Exercise the shipped copy/install step so missing local lockfile dependencies
+  // cannot be hidden by a hand-written fixture installation.
+  cpSync('templates/automatic-release', path.join(root, '.workflow-templates/templates/automatic-release'), {
+    recursive: true,
+    filter: source => path.basename(source) !== 'node_modules',
+  });
+  const workflow = parseDocument(readFileSync('.github/workflows/automatic-release.yml', 'utf8')).toJS();
+  const install = workflow.jobs['automatic-release'].steps.find(step => step.name === 'Install locked release tooling');
+  run('bash', ['-c', install.run], root, { ...fixtureEnvironment, RUNNER_TEMP: root, npm_config_fetch_retries: '0' });
   run('npm', ['audit', '--audit-level=moderate'], tools);
+  const requireTools = createRequire(path.join(tools, 'run-release.mjs'));
+  const analyzer = await import(pathToFileURL(requireTools.resolve('@semantic-release/commit-analyzer')));
+  const generatorPath = requireTools.resolve('@semantic-release/release-notes-generator');
+  const generator = await import(pathToFileURL(generatorPath));
+  const generatorManifest = JSON.parse(readFileSync(path.join(path.dirname(generatorPath), 'package.json'), 'utf8'));
+  assert(requireTools('semver').satisfies(process.version, generatorManifest.engines.node), 'test Node must satisfy the native notes generator engine');
+  const cases = [
+    { name: 'patch', bump: 'patch', version: '1.0.1', message: 'fix: prevent fixture race (#12)', subject: 'prevent fixture race', section: 'Bug Fixes' },
+    { name: 'minor', bump: 'minor', version: '1.1.0', message: 'feat: add fixture option', subject: 'add fixture option', section: 'Features' },
+    { name: 'breaking', bump: 'major', version: '2.0.0', message: 'feat!: remove fixture legacy mode\n\nBREAKING CHANGE: legacy mode has been removed', subject: 'remove fixture legacy mode', section: 'BREAKING CHANGES' },
+  ];
+  for (const fixture of cases) {
+    const hash = 'a'.repeat(40);
+    const context = {
+      cwd: tools,
+      env: fixtureEnvironment,
+      logger: { log() {}, error() {} },
+      options: { repositoryUrl: 'https://github.com/example/fixture.git' },
+      commits: [{ hash, message: fixture.message }],
+      lastRelease: { version: '1.0.0', gitTag: 'v1.0.0', gitHead: 'b'.repeat(40) },
+      nextRelease: { version: fixture.version, gitTag: `v${fixture.version}`, gitHead: hash },
+    };
+    assert.equal(await analyzer.analyzeCommits({ preset: 'conventionalcommits' }, context), fixture.bump);
+    const notes = await generator.generateNotes({ preset: 'conventionalcommits' }, context);
+    assert(notes.includes(fixture.version));
+    assert.match(notes, new RegExp(`###[^\n]*${fixture.section}`));
+    assert(notes.includes(fixture.subject));
+    assert(notes.includes(`https://github.com/example/fixture/compare/v1.0.0...v${fixture.version}`));
+    assert(notes.includes(`https://github.com/example/fixture/commit/${hash}`));
+    if (fixture.name === 'patch') assert(notes.includes('https://github.com/example/fixture/issues/12'));
+    if (fixture.name === 'breaking') assert(notes.includes('legacy mode has been removed'));
+    assert.doesNotMatch(notes, /Missing helper|requires conventional-changelog-writer/);
+    console.log(`Passed native ${fixture.name} analysis and release notes for ${fixture.version}.`);
+  }
+  const defaultNotes = await generator.generateNotes({}, {
+    cwd: tools,
+    options: { repositoryUrl: 'https://github.com/example/fixture.git' },
+    commits: [{ hash: 'a'.repeat(40), message: 'fix: preserve default Angular rendering' }],
+    lastRelease: { gitTag: 'v1.0.0' },
+    nextRelease: { version: '1.0.1', gitTag: 'v1.0.1' },
+  });
+  assert.match(defaultNotes, /Bug Fixes/);
+  assert.match(defaultNotes, /preserve default Angular rendering/);
+  console.log('Passed native default Angular release notes.');
+  console.log(`Native notes generator ${generatorManifest.version} passed on Node ${process.version}.`);
   assert.equal(JSON.parse(readFileSync(path.join(tools, 'node_modules/@sympress/release-disabled-npm-plugin/package.json'), 'utf8')).name, '@sympress/release-disabled-npm-plugin');
   const guard = await import(pathToFileURL(path.join(tools, 'disabled-npm-plugin/index.mjs')));
   assert.throws(() => guard.prepare(), /npm publication requires a separate reviewed workflow/);
@@ -64,42 +113,51 @@ try {
   assert.equal(url, 'https://github.com/example/repo.git');
   assert(!readFileSync(argsLog, 'utf8').includes('canary-token'));
   for (const variant of ['fallback', 'consumer']) {
-    const cwd = path.join(root, variant);
-    const bare = path.join(root, `${variant}.git`);
-    mkdirSync(cwd);
-    run('git', ['init', '--bare', '-b', 'main', bare], root, fixtureEnvironment);
-    run('git', ['init', '-b', 'main'], cwd, fixtureEnvironment);
-    run('git', ['config', 'user.email', 'fixture@example.test'], cwd, fixtureEnvironment);
-    run('git', ['config', 'user.name', 'Fixture'], cwd, fixtureEnvironment);
-    run('git', ['remote', 'add', 'origin', bare], cwd, fixtureEnvironment);
-    writeFileSync(path.join(cwd, 'README.md'), 'fixture');
-    run('git', ['add', 'README.md'], cwd, fixtureEnvironment);
-    run('git', ['commit', '-m', 'feat: fixture'], cwd, fixtureEnvironment);
-    run('git', ['push', '-u', 'origin', 'main'], cwd, fixtureEnvironment);
-    let prefix;
-    if (variant === 'fallback') {
-      const fallback = path.join(cwd, 'fallback.cjs');
-      copyFileSync('templates/automatic-release/release.config.cjs', fallback);
-      prefix = `extends: ${JSON.stringify(fallback)},`;
-    } else {
-      prefix = `plugins: ['@semantic-release/commit-analyzer', '@semantic-release/github'],`;
+    for (const fixture of cases) {
+      const cwd = path.join(root, `${variant}-${fixture.name}`);
+      const bare = path.join(root, `${variant}-${fixture.name}.git`);
+      mkdirSync(cwd);
+      run('git', ['init', '--bare', '-b', 'main', bare], root, fixtureEnvironment);
+      run('git', ['init', '-b', 'main'], cwd, fixtureEnvironment);
+      run('git', ['config', 'user.email', 'fixture@example.test'], cwd, fixtureEnvironment);
+      run('git', ['config', 'user.name', 'Fixture'], cwd, fixtureEnvironment);
+      run('git', ['remote', 'add', 'origin', bare], cwd, fixtureEnvironment);
+      writeFileSync(path.join(cwd, 'README.md'), 'fixture');
+      run('git', ['add', 'README.md'], cwd, fixtureEnvironment);
+      run('git', ['commit', '-m', 'chore: fixture baseline'], cwd, fixtureEnvironment);
+      run('git', ['tag', 'v1.0.0'], cwd, fixtureEnvironment);
+      run('git', ['push', '-u', 'origin', 'main', '--tags'], cwd, fixtureEnvironment);
+      writeFileSync(path.join(cwd, 'README.md'), fixture.subject);
+      run('git', ['add', 'README.md'], cwd, fixtureEnvironment);
+      run('git', ['commit', '-m', fixture.message], cwd, fixtureEnvironment);
+      run('git', ['push', 'origin', 'main'], cwd, fixtureEnvironment);
+      let prefix;
+      if (variant === 'fallback') {
+        const fallback = path.join(cwd, 'fallback.cjs');
+        copyFileSync('templates/automatic-release/release.config.cjs', fallback);
+        prefix = `extends: ${JSON.stringify(fallback)},`;
+      } else {
+        prefix = `plugins: [['@semantic-release/commit-analyzer', {preset:'conventionalcommits'}], ['@semantic-release/release-notes-generator', {preset:'conventionalcommits'}], '@semantic-release/github'],`;
+      }
+      writeFileSync(path.join(cwd, 'release.config.cjs'), `module.exports={${prefix}repositoryUrl:${JSON.stringify(pathToFileURL(bare).href)},branches:['main'],verifyConditions:[],prepare:[],publish:[],success:[],fail:[]};`);
+      const configuration = await entry.configuration(path.join(cwd, 'release.config.cjs'));
+      assert(configuration.plugins.some(item => (Array.isArray(item) ? item[0] : item).endsWith('github-auth-plugin.mjs')));
+      const result = run('node', [path.join(tools, 'run-release.mjs')], cwd, { ...fixtureEnvironment, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, RELEASE_CONFIG: 'release.config.cjs', SYMPRESS_RELEASE_DRY_RUN: 'true', GITHUB_TOKEN: 'canary-token', SYMPRESS_RELEASE_TOKEN: 'canary-token' });
+      assert.match(result.stdout + result.stderr, /dry-run/);
+      assert((result.stdout + result.stderr).includes(`next release version is ${fixture.version}`));
+      assert((result.stdout + result.stderr).includes(fixture.subject));
+      assert((result.stdout + result.stderr).includes(fixture.section));
+      const expectedTag = `v${fixture.version}`;
+      assert((result.stdout + result.stderr).includes(`Skip ${expectedTag} tag creation in dry-run mode`));
+      assert.doesNotMatch(result.stdout + result.stderr, /triggered by a pull request/);
+      assert.equal(run('git', ['tag', '--list'], cwd, fixtureEnvironment).stdout.trim(), 'v1.0.0');
+      assert.equal(run('git', ['--git-dir', bare, 'tag', '--list'], root, fixtureEnvironment).stdout.trim(), 'v1.0.0');
+      assert(!readFileSync(path.join(cwd, '.git/config'), 'utf8').includes('canary-token'));
+      console.log(`Passed ${variant} native ${fixture.name} release for ${fixture.version} in dry-run mode with no new local or remote tags.`);
     }
-    writeFileSync(path.join(cwd, 'release.config.cjs'), `module.exports={${prefix}repositoryUrl:${JSON.stringify(bare)},branches:['main'],verifyConditions:[],generateNotes:()=> 'Fixture notes',prepare:[],publish:[],success:[],fail:[]};`);
-    const configuration = await entry.configuration(path.join(cwd, 'release.config.cjs'));
-    assert(configuration.plugins.some(item => (Array.isArray(item) ? item[0] : item).endsWith('github-auth-plugin.mjs')));
-    const result = run('node', [path.join(tools, 'run-release.mjs')], cwd, { ...fixtureEnvironment, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, RELEASE_CONFIG: 'release.config.cjs', SYMPRESS_RELEASE_DRY_RUN: 'true', GITHUB_TOKEN: 'canary-token', SYMPRESS_RELEASE_TOKEN: 'canary-token' });
-    assert.match(result.stdout + result.stderr, /dry-run/);
-    assert.match(result.stdout + result.stderr, /next release version is 1\.0\.0/);
-    const expectedTag = 'v1.0.0';
-    assert((result.stdout + result.stderr).includes(`Skip ${expectedTag} tag creation in dry-run mode`));
-    assert.doesNotMatch(result.stdout + result.stderr, /triggered by a pull request/);
-    assert.equal(run('git', ['tag', '--list'], cwd, fixtureEnvironment).stdout.trim(), '');
-    assert.equal(run('git', ['--git-dir', bare, 'tag', '--list'], root, fixtureEnvironment).stdout.trim(), '');
-    assert(!readFileSync(path.join(cwd, '.git/config'), 'utf8').includes('canary-token'));
-    console.log(`Passed ${variant} release analysis for 1.0.0 in dry-run mode with no local or remote tags.`);
   }
   assert(!readFileSync(argsLog, 'utf8').includes('canary-token'));
-  console.log('Passed locked tool install, fallback and consumer dry runs, and Git authentication-failure credential canaries.');
+  console.log('Passed shipped workflow installation, native notes, fallback and consumer dry runs, and Git authentication-failure credential canaries.');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

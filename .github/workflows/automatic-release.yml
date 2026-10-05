@@ -136,6 +136,7 @@ jobs:
           mkdir -p "$tools_dir"
           cp .workflow-templates/templates/automatic-release/package{,-lock}.json "$tools_dir/"
           cp .workflow-templates/templates/automatic-release/{run-release,github-auth-plugin}.mjs "$tools_dir/"
+          cp .workflow-templates/templates/automatic-release/sympress-bounded-braces-1.0.0.tgz "$tools_dir/"
           cp -R .workflow-templates/templates/automatic-release/disabled-npm-plugin "$tools_dir/"
           npm ci --prefix "$tools_dir" --ignore-scripts --no-audit
           rm -rf .workflow-templates
