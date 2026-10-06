@@ -32,8 +32,9 @@ post-install/plugin work must be explicitly moved to an authorized credential-fr
 build step before adopting this workflow.
 
 The dependency artifact includes downloaded Composer archives and a sanitized
-Git object cache for source-only private packages. It excludes authentication,
-repository metadata, Git remotes and hooks. Composer reinstallation in the build
+Git object cache for source-only private packages. Authentication files, Git
+remotes, hooks and external object alternates are excluded. Restored mirrors have
+only a minimal bare-repository configuration, objects and refs. Composer reinstallation in the build
 step uses this cache with networking disabled; no install secret or SSH agent is
 available. A missing cached package fails the build instead of requesting credentials.
 The final release artifact excludes these download caches.
