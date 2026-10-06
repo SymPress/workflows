@@ -5,7 +5,7 @@ Use `deploy-deployer.yml` when a repository has a Deployer setup.
 ```yml
 jobs:
   deploy:
-    uses: sympress/workflows/.github/workflows/deploy-deployer.yml@3a5e871276313960d5870e440e17722bbdf298a6
+    uses: sympress/workflows/.github/workflows/deploy-deployer.yml@2ed4e3bca97fae7cda4d08b176199e2a47a9503e
     with:
       environment: production
       deployment_directory: deployment
