@@ -62,9 +62,12 @@ Outputs exposed to caller workflows:
 | `deploy_warnings` | Retained compatibility output; empty. |
 | `deploy_log_excerpt` | Retained compatibility output; empty. |
 
-The workflow uses isolated fetch, build and deploy jobs. `dependencies` installs the project and
+The workflow uses isolated fetch, audit, build, verification and deploy jobs. `dependencies` installs the project and
 Deployer locks with scripts and plugins disabled and fetch-only credentials.
-`build` restores that run's artifact and runs application build scripts without
+`audit` restores that immutable dependency artifact without running build code,
+audits Composer and Node dependencies, and records lock hashes, the installed
+production inventory and CycloneDX SBOM in a separate artifact.
+`build` restores the dependency artifact and runs application build scripts without
 any operator secrets or deployment environment. `deploy` checks out the exact
 tested caller commit into a separate trusted source directory and installs its
 deployment lock with scripts/plugins disabled and fetch-only authentication.
@@ -75,6 +78,13 @@ into a new directory outside the executable workspace. Secret files, authenticat
 VCS metadata and private caches are excluded. Internal relative symlinks retain
 pnpm's dependency resolution; absolute or external links and links or hardlinks
 to private files fail packaging. Restores use Python's `data` extraction filter.
+
+Before signing or deployment, `verify` runs on a fresh runner and compares release
+metadata with the independently uploaded audit artifact. A changed lockfile,
+missing or different Composer package inventory, or altered SBOM stops the run.
+Build-provided executables and PATH changes are never used for this verification.
+The SBOM inventories audited dependency inputs; generated application code is
+outside that statement. Non-npm JavaScript inventories retain an explicit limitation.
 
 Deployment recipes run from the trusted checkout. Use the absolute
 `SYMPRESS_RELEASE_DIRECTORY` environment variable as the upload source, for example

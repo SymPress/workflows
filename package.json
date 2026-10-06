@@ -13,7 +13,7 @@
     "test:consumers": "node scripts/validate-consumers.mjs",
     "test:contracts": "node scripts/validate-contracts.mjs",
     "test:shell": "node scripts/test-runner-shell.mjs",
-    "test:artifacts": "node scripts/test-deploy-artifact.mjs && node scripts/test-release-integrity.mjs",
+    "test:artifacts": "node scripts/test-deploy-artifact.mjs && node scripts/test-release-integrity.mjs && node scripts/test-audit-isolation.mjs",
     "test:canary": "node scripts/test-canary-notification.mjs",
     "test:release": "node scripts/test-braces-depth.mjs && node scripts/test-release-tooling.mjs"
   },
@@ -27,6 +27,7 @@
     "braces": "$braces",
     "js-yaml": "4.3.2",
     "markdown-it": "14.3.2",
-    "smol-toml": "1.9.0"
+    "smol-toml": "1.9.0",
+    "katex": "0.18.2"
   }
 }
