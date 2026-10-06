@@ -17,7 +17,7 @@ try {
   mkdirSync(path.join(source, 'vendor/composer'), { recursive: true });
   const installed = path.join(source, 'vendor/composer/installed.json');
   writeFileSync(installed, JSON.stringify({ packages: [{ name: 'vendor/runtime', version: '1.2.3' }] }));
-  writeFileSync(path.join(source, 'composer.lock'), JSON.stringify({ 'packages-dev': [{ name: 'vendor/test-tool' }] }));
+  writeFileSync(path.join(source, 'composer.lock'), JSON.stringify({ packages: [{ name: 'vendor/runtime', version: '1.2.3' }], 'packages-dev': [{ name: 'vendor/test-tool' }] }));
   writeFileSync(path.join(source, 'package-lock.json'), JSON.stringify({ packages: {
     '': { name: 'site' }, 'node_modules/web-lib': { version: '2.3.4' },
     'node_modules/test-tool': { version: '1.0.0', dev: true },
@@ -28,7 +28,7 @@ try {
   const run = (job, name, overrides = {}) => spawnSync('bash', ['-c', step(job, name)], {
     cwd: source, env: { ...env, ...overrides }, encoding: 'utf8', timeout: 10000,
   });
-  let result = run('build', 'Generate production SBOM');
+  let result = run('audit', 'Generate production SBOM');
   assert.equal(result.status, 0, result.stderr);
   const sbomPath = path.join(source, 'sympress-sbom.cdx.json');
   const sbom = JSON.parse(readFileSync(sbomPath));
@@ -36,16 +36,23 @@ try {
   assert.match(sbom.serialNumber, /^urn:uuid:[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.deepEqual(sbom.components.map(c => c.purl), ['pkg:composer/vendor/runtime@1.2.3', 'pkg:npm/web-lib@2.3.4']);
   writeFileSync(installed, JSON.stringify({ packages: [{ name: 'vendor/test-tool', version: '1.0.0' }] }));
-  assert.notEqual(run('build', 'Generate production SBOM').status, 0, 'Installed dev tools must fail the release inventory');
+  assert.notEqual(run('audit', 'Generate production SBOM').status, 0, 'Installed dev tools must fail the release inventory');
   writeFileSync(installed, JSON.stringify({ packages: [{ name: 'vendor/runtime', version: '1.2.3' }] }));
   rmSync(sbomPath);
   const privateFile = path.join(source, 'auth.json');
   writeFileSync(privateFile, 'private-sentinel');
   symlinkSync('auth.json', sbomPath);
-  assert.notEqual(run('build', 'Generate production SBOM').status, 0, 'SBOM cannot overwrite a private alias');
+  assert.notEqual(run('audit', 'Generate production SBOM').status, 0, 'SBOM cannot overwrite a private alias');
   assert.equal(readFileSync(privateFile, 'utf8'), 'private-sentinel');
   rmSync(sbomPath);
-  assert.equal(run('build', 'Generate production SBOM').status, 0);
+  assert.equal(run('audit', 'Generate production SBOM').status, 0);
+  const auditManifest = path.join(source, 'sympress-audit-locks.json');
+  rmSync(auditManifest);
+  symlinkSync('auth.json', auditManifest);
+  assert.notEqual(run('audit', 'Generate production SBOM').status, 0, 'Audit manifest cannot overwrite a private alias');
+  assert.equal(readFileSync(privateFile, 'utf8'), 'private-sentinel');
+  rmSync(auditManifest);
+  assert.equal(run('audit', 'Generate production SBOM').status, 0);
   mkdirSync(path.join(source, 'deployment/vendor/bin'), { recursive: true });
   writeFileSync(path.join(source, 'deployment/deploy.php'), 'build-tampered-recipe');
   writeFileSync(path.join(source, 'deployment/vendor/bin/dep'), '#!/bin/sh\ntouch "$TAMPER_EXECUTED"\nexit 91\n', { mode: 0o700 });

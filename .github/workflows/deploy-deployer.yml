@@ -483,9 +483,199 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  audit:
+    name: Audit locked build inputs
+    needs: dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+    env:
+      COMPOSER_NO_DEV: 1
+      COMPOSER_CACHE_DIR: ${{ github.workspace }}/.sympress-composer-cache
+    steps:
+      - name: Download dependencies artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.dependencies.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-dependencies
+
+      - name: Restore dependencies artifact
+        shell: bash
+        env:
+          ARTIFACT_KIND: dependencies
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          root = pathlib.Path.cwd()
+          kind = os.environ['ARTIFACT_KIND']
+          source = pathlib.Path(os.environ['RUNNER_TEMP']) / ('sympress-' + kind) / (kind + '.tgz')
+          with tarfile.open(source) as archive:
+              archive.extractall(root, filter='data')
+          metadata = json.loads((root / '.sympress-artifact.json').read_text())
+          if metadata != {'commit': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'kind': kind}:
+              raise RuntimeError('Artifact provenance mismatch')
+          PY
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: ${{ inputs.php_extensions }}
+          tools: composer:v2, ${{ inputs.php_tools }}
+          coverage: none
+
+      - name: Detect package.json
+        id: node
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          test -f "$WD/package.json" && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Activate package manager
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ] || [ -f yarn.lock ]; then
+            if ! command -v corepack >/dev/null 2>&1; then
+              npm install --global corepack@0.34.6 --ignore-scripts --registry=https://registry.npmjs.org/
+            fi
+            corepack enable
+          fi
+
+      - name: Audit production Composer dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: composer --no-plugins audit --locked --no-dev --no-interaction
+
+      - name: Audit Node dependencies
+        if: ${{ steps.node.outputs.enabled == 'true' }}
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm audit --audit-level high
+          elif [ -f yarn.lock ]; then
+            if [[ "$(yarn --version)" == 1.* ]]; then
+              report="$(mktemp)"
+              trap 'rm -f "$report"' EXIT
+              set +e
+              yarn audit --json > "$report"
+              result=$?
+              set -e
+              # An absent summary also rejects registry/network failures.
+              python3 - "$report" "$result" <<'PY'
+          import json, sys
+          summaries = [e['data']['vulnerabilities'] for e in
+                       (json.loads(line) for line in open(sys.argv[1])) if e.get('type') == 'auditSummary']
+          if len(summaries) != 1 or int(sys.argv[2]) > 31 or (int(sys.argv[2]) & 24):
+              raise SystemExit('Yarn audit did not establish a passing release gate.')
+          if summaries[0].get('high', 0) or summaries[0].get('critical', 0):
+              raise SystemExit('High or critical Node advisory blocks release.')
+          PY
+            else
+              yarn npm audit --all --recursive --severity high
+            fi
+          else
+            npm audit --audit-level high
+          fi
+
+      - name: Generate production SBOM
+        shell: bash
+        env:
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.parse, uuid
+          root = pathlib.Path.cwd().resolve()
+          working = (root / os.environ['WD']).resolve()
+          if not working.is_relative_to(root):
+              raise RuntimeError('Invalid SBOM working directory')
+          components = {}
+          def add(name, version, ecosystem, role):
+              if not isinstance(name, str) or not name or not isinstance(version, str) or not version:
+                  raise RuntimeError('Invalid installed component metadata')
+              purl = 'pkg:' + ecosystem + '/' + urllib.parse.quote(name, safe='/') + '@' + urllib.parse.quote(version, safe='')
+              components[purl] = {'type': 'library', 'name': name, 'version': version, 'bom-ref': purl, 'purl': purl,
+                                  'properties': [{'name': 'sympress:inventory-source', 'value': role}]}
+          installed = working / 'vendor/composer/installed.json'
+          if not installed.is_file() or not installed.resolve().is_relative_to(root):
+              raise RuntimeError('Installed Composer metadata required for SBOM')
+          inventory = json.loads(installed.read_text())
+          packages = inventory.get('packages') if isinstance(inventory, dict) else inventory
+          if not isinstance(packages, list):
+              raise RuntimeError('Invalid Composer inventory')
+          lock = json.loads((working / 'composer.lock').read_text())
+          expected = {p['name']: p['version'] for p in lock.get('packages', [])}
+          actual = {p['name']: p['version'] for p in packages}
+          if actual != expected:
+              raise RuntimeError('Installed production inventory differs from the audited Composer lock')
+          dev = {p['name'] for p in lock.get('packages-dev', [])}
+          for package in packages:
+              if package.get('name') in dev:
+                  raise RuntimeError('Development package remains in release inventory')
+              add(package.get('name'), package.get('version'), 'composer', 'installed-production-package')
+          node_lock = working / 'package-lock.json'
+          if node_lock.is_file():
+              node = json.loads(node_lock.read_text())
+              if not isinstance(node.get('packages'), dict):
+                  raise RuntimeError('SBOM requires package-lock v2 or v3')
+              for location, package in node['packages'].items():
+                  if not location or package.get('dev') or package.get('link'):
+                      continue
+                  name = package.get('name') or location.rsplit('node_modules/', 1)[-1]
+                  add(name, package.get('version'), 'npm', 'locked-production-build-input')
+          limitations = []
+          if (working / 'package.json').is_file() and not node_lock.is_file():
+              limitations.append({'name': 'sympress:inventory-limitation', 'value': 'Non-npm JavaScript build inputs are not inventoried; Composer production inventory is complete.'})
+          serial = uuid.uuid5(uuid.NAMESPACE_URL, 'https://github.com/' + os.environ['GITHUB_REPOSITORY']
+                             + '/actions/runs/' + os.environ['GITHUB_RUN_ID'] + '/' + os.environ['GITHUB_SHA'])
+          sbom = {'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1, 'serialNumber': 'urn:uuid:' + str(serial),
+                  'metadata': {'component': {'type': 'application', 'name': os.environ['GITHUB_REPOSITORY'],
+                                            'version': os.environ['GITHUB_SHA']}, 'properties': limitations},
+                  'components': [components[k] for k in sorted(components)]}
+          target = root / 'sympress-sbom.cdx.json'
+          if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
+              raise RuntimeError('SBOM output must not alias existing files')
+          target.write_text(json.dumps(sbom, sort_keys=True, indent=2) + '\n')
+          locks = {}
+          for name in ['composer.lock', 'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']:
+              path = working / name
+              if path.is_file():
+                  locks[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
+          manifest = root / 'sympress-audit-locks.json'
+          if manifest.is_symlink() or (manifest.exists() and manifest.stat().st_nlink != 1):
+              raise RuntimeError('Audit manifest must not alias existing files')
+          manifest.write_text(json.dumps({'commit': os.environ['GITHUB_SHA'], 'locks': locks, 'packages': expected}, sort_keys=True))
+          PY
+
+
+      - name: Upload audited inventory
+        id: artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sympress-deploy-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            sympress-sbom.cdx.json
+            sympress-audit-locks.json
+          if-no-files-found: error
+          retention-days: 1
+
   build:
     name: Build without deployment secrets
-    needs: dependencies
+    needs: [dependencies, audit]
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     outputs:
@@ -574,100 +764,15 @@ jobs:
             fi
           fi
 
-      - name: Audit production Composer dependencies
-        working-directory: ${{ inputs.working_directory }}
-        run: composer --no-plugins audit --locked --no-dev --no-interaction
+      - name: Download audited inventory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.audit.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-audit
 
-      - name: Audit Node dependencies
-        if: ${{ steps.node.outputs.enabled == 'true' }}
-        working-directory: ${{ inputs.working_directory }}
+      - name: Include audited SBOM
         shell: bash
-        run: |
-          set -euo pipefail
-          unset COMPOSER_AUTH NODE_AUTH_TOKEN NPM_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND NPM_CONFIG_USERCONFIG
-          if [ -f pnpm-lock.yaml ]; then
-            pnpm audit --audit-level high
-          elif [ -f yarn.lock ]; then
-            if [[ "$(yarn --version)" == 1.* ]]; then
-              report="$(mktemp)"
-              trap 'rm -f "$report"' EXIT
-              set +e
-              yarn audit --json > "$report"
-              result=$?
-              set -e
-              # An absent summary also rejects registry/network failures.
-              python3 - "$report" "$result" <<'PY'
-          import json, sys
-          summaries = [e['data']['vulnerabilities'] for e in
-                       (json.loads(line) for line in open(sys.argv[1])) if e.get('type') == 'auditSummary']
-          if len(summaries) != 1 or int(sys.argv[2]) > 31 or (int(sys.argv[2]) & 24):
-              raise SystemExit('Yarn audit did not establish a passing release gate.')
-          if summaries[0].get('high', 0) or summaries[0].get('critical', 0):
-              raise SystemExit('High or critical Node advisory blocks release.')
-          PY
-            else
-              yarn npm audit --all --recursive --severity high
-            fi
-          else
-            npm audit --audit-level high
-          fi
-
-      - name: Generate production SBOM
-        shell: bash
-        env:
-          WD: ${{ inputs.working_directory }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, os, pathlib, urllib.parse, uuid
-          root = pathlib.Path.cwd().resolve()
-          working = (root / os.environ['WD']).resolve()
-          if not working.is_relative_to(root):
-              raise RuntimeError('Invalid SBOM working directory')
-          components = {}
-          def add(name, version, ecosystem, role):
-              if not isinstance(name, str) or not name or not isinstance(version, str) or not version:
-                  raise RuntimeError('Invalid installed component metadata')
-              purl = 'pkg:' + ecosystem + '/' + urllib.parse.quote(name, safe='/') + '@' + urllib.parse.quote(version, safe='')
-              components[purl] = {'type': 'library', 'name': name, 'version': version, 'bom-ref': purl, 'purl': purl,
-                                  'properties': [{'name': 'sympress:inventory-source', 'value': role}]}
-          installed = working / 'vendor/composer/installed.json'
-          if not installed.is_file() or not installed.resolve().is_relative_to(root):
-              raise RuntimeError('Installed Composer metadata required for SBOM')
-          inventory = json.loads(installed.read_text())
-          packages = inventory.get('packages') if isinstance(inventory, dict) else inventory
-          if not isinstance(packages, list):
-              raise RuntimeError('Invalid Composer inventory')
-          lock = json.loads((working / 'composer.lock').read_text())
-          dev = {p['name'] for p in lock.get('packages-dev', [])}
-          for package in packages:
-              if package.get('name') in dev:
-                  raise RuntimeError('Development package remains in release inventory')
-              add(package.get('name'), package.get('version'), 'composer', 'installed-production-package')
-          node_lock = working / 'package-lock.json'
-          if node_lock.is_file():
-              node = json.loads(node_lock.read_text())
-              if not isinstance(node.get('packages'), dict):
-                  raise RuntimeError('SBOM requires package-lock v2 or v3')
-              for location, package in node['packages'].items():
-                  if not location or package.get('dev') or package.get('link'):
-                      continue
-                  name = package.get('name') or location.rsplit('node_modules/', 1)[-1]
-                  add(name, package.get('version'), 'npm', 'locked-production-build-input')
-          limitations = []
-          if (working / 'package.json').is_file() and not node_lock.is_file():
-              limitations.append({'name': 'sympress:inventory-limitation', 'value': 'Non-npm JavaScript build inputs are not inventoried; Composer production inventory is complete.'})
-          serial = uuid.uuid5(uuid.NAMESPACE_URL, 'https://github.com/' + os.environ['GITHUB_REPOSITORY']
-                             + '/actions/runs/' + os.environ['GITHUB_RUN_ID'] + '/' + os.environ['GITHUB_SHA'])
-          sbom = {'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1, 'serialNumber': 'urn:uuid:' + str(serial),
-                  'metadata': {'component': {'type': 'application', 'name': os.environ['GITHUB_REPOSITORY'],
-                                            'version': os.environ['GITHUB_SHA']}, 'properties': limitations},
-                  'components': [components[k] for k in sorted(components)]}
-          target = root / 'sympress-sbom.cdx.json'
-          if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
-              raise RuntimeError('SBOM output must not alias existing files')
-          target.write_text(json.dumps(sbom, sort_keys=True, indent=2) + '\n')
-          PY
+        run: cp "$RUNNER_TEMP/sympress-audit/sympress-sbom.cdx.json" sympress-sbom.cdx.json
 
       - name: Package release artifact
         id: release-package
@@ -741,9 +846,64 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+
+  verify:
+    name: Verify release against audited inventory
+    needs: [audit, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Download built release
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-release
+
+      - name: Download independent audited inventory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.audit.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sympress-audit
+
+      - name: Verify immutable audit evidence
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.release_sha256 }}
+          WD: ${{ inputs.working_directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          runner = pathlib.Path(os.environ['RUNNER_TEMP'])
+          archive_path = runner / 'sympress-release/release.tgz'
+          if hashlib.sha256(archive_path.read_bytes()).hexdigest() != os.environ['EXPECTED_SHA256']:
+              raise RuntimeError('Release digest mismatch')
+          evidence = json.loads((runner / 'sympress-audit/sympress-audit-locks.json').read_text())
+          if evidence['commit'] != os.environ['GITHUB_SHA']:
+              raise RuntimeError('Audited commit mismatch')
+          working = pathlib.PurePosixPath(os.environ['WD'])
+          if working.is_absolute() or '..' in working.parts:
+              raise RuntimeError('Invalid audited working directory')
+          with tarfile.open(archive_path) as archive:
+              def read(name):
+                  member = archive.getmember('./' + name)
+                  if not member.isfile() or member.size > 10485760:
+                      raise RuntimeError('Missing regular, bounded inventory file: ' + name)
+                  return archive.extractfile(member).read()
+              for name, digest in evidence['locks'].items():
+                  if hashlib.sha256(read(name)).hexdigest() != digest:
+                      raise RuntimeError('Build changed an audited lockfile: ' + name)
+              installed = json.loads(read(str(working / 'vendor/composer/installed.json')))
+              packages = installed.get('packages') if isinstance(installed, dict) else installed
+              if not isinstance(packages, list) or {p['name']: p['version'] for p in packages} != evidence['packages']:
+                  raise RuntimeError('Build changed the audited production inventory')
+              if read('sympress-sbom.cdx.json') != (runner / 'sympress-audit/sympress-sbom.cdx.json').read_bytes():
+                  raise RuntimeError('Build changed the independent SBOM')
+          PY
+
   attest:
     name: Attest the deployment archive
-    needs: build
+    needs: [build, verify]
     if: ${{ inputs.artifact_attestation }}
     runs-on: ubuntu-latest
     permissions:
@@ -796,8 +956,8 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: [build, attest]
-    if: ${{ always() && needs.build.result == 'success' && (!inputs.artifact_attestation || needs.attest.result == 'success') }}
+    needs: [build, verify, attest]
+    if: ${{ always() && needs.build.result == 'success' && needs.verify.result == 'success' && (!inputs.artifact_attestation || needs.attest.result == 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
