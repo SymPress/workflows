@@ -23,7 +23,8 @@ try {
     writeFileSync(path.join(source, name), 'private-artifact-sentinel');
   }
   writeFileSync(path.join(source, '.env.example'), 'PUBLIC_PLACEHOLDER=true');
-  const env = { ...process.env, GITHUB_SHA: 'abcdef0123456789', GITHUB_RUN_ID: 'fixture-run', RUNNER_TEMP: runner,
+  const env = { ...process.env, COMPOSER_CACHE_DIR: path.join(runner, 'sympress-composer-cache'),
+    GITHUB_SHA: 'abcdef0123456789', GITHUB_RUN_ID: 'fixture-run', RUNNER_TEMP: runner,
     GITHUB_OUTPUT: path.join(root, 'step-output') };
   const composerCache = path.join(runner, 'sympress-composer-cache');
   mkdirSync(path.join(composerCache, 'files/private/plugin'), { recursive: true });

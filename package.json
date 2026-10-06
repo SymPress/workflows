@@ -26,6 +26,7 @@
   "overrides": {
     "braces": "$braces",
     "js-yaml": "4.3.2",
-    "markdown-it": "14.3.2"
+    "markdown-it": "14.3.2",
+    "smol-toml": "1.9.0"
   }
 }
