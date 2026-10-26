@@ -78,14 +78,14 @@ jobs:
 
       - name: Run typos
         if: ${{ inputs.run_typos }}
-        uses: crate-ci/typos@00f422f3b19c57bc6338715ebfe3316d38768461 # v1.50.3
+        uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b # v1.51.1
         with:
           files: ${{ inputs.typos_files }}
           config: ${{ inputs.typos_config }}
 
       - name: Run CSpell
         if: ${{ inputs.run_cspell }}
-        uses: streetsidesoftware/cspell-action@6f3c77c1406bc930f944ba97e9801a22e42caf58 # v9.1.0
+        uses: streetsidesoftware/cspell-action@ce1816e4ce36532956ac6e983737392774b6e169 # v9.2.0
         with:
           files: ${{ inputs.cspell_files }}
           config: ${{ inputs.cspell_config }}

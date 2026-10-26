@@ -162,7 +162,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -243,14 +243,14 @@ jobs:
 
       - name: Set up Node
         if: ${{ steps.node.outputs.enabled == 'true' && steps.package-manager.outputs.cache == '' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
 
       - name: Set up Node for locked package manager
         if: ${{ steps.node.outputs.enabled == 'true' && steps.package-manager.outputs.cache != '' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node_version }}
           registry-url: ${{ inputs.npm_registry_domain }}
@@ -476,7 +476,7 @@ jobs:
 
       - name: Upload dependencies artifact
         id: artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sympress-deploy-dependencies-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/dependencies.tgz
@@ -495,7 +495,7 @@ jobs:
       COMPOSER_CACHE_DIR: ${{ github.workspace }}/.sympress-composer-cache
     steps:
       - name: Download dependencies artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.dependencies.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-dependencies
@@ -519,7 +519,7 @@ jobs:
           PY
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -536,7 +536,7 @@ jobs:
 
       - name: Set up Node
         if: ${{ steps.node.outputs.enabled == 'true' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node_version }}
 
@@ -664,7 +664,7 @@ jobs:
 
       - name: Upload audited inventory
         id: artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sympress-deploy-audit-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -686,7 +686,7 @@ jobs:
       COMPOSER_CACHE_DIR: ${{ github.workspace }}/.sympress-composer-cache
     steps:
       - name: Download dependencies artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.dependencies.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-dependencies
@@ -710,7 +710,7 @@ jobs:
           PY
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -727,7 +727,7 @@ jobs:
 
       - name: Set up Node
         if: ${{ steps.node.outputs.enabled == 'true' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node_version }}
 
@@ -765,7 +765,7 @@ jobs:
           fi
 
       - name: Download audited inventory
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.audit.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-audit
@@ -839,7 +839,7 @@ jobs:
 
       - name: Upload release artifact
         id: artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sympress-deploy-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release.tgz
@@ -854,13 +854,13 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes }}
     steps:
       - name: Download built release
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-release
 
       - name: Download independent audited inventory
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.audit.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-audit
@@ -913,7 +913,7 @@ jobs:
       id-token: write
     steps:
       - name: Download the exact release archive
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-release
@@ -1010,7 +1010,7 @@ jobs:
           PY
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -1065,7 +1065,7 @@ jobs:
           PY
 
       - name: Download release artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: ${{ runner.temp }}/sympress-release
