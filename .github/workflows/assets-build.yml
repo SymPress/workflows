@@ -199,7 +199,7 @@ jobs:
 
       - name: Set up PHP
         if: ${{ steps.detect.outputs.has_composer == 'true' }}
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
@@ -291,7 +291,7 @@ jobs:
 
       - name: Upload build artifact
         if: ${{ inputs.artifact_name != '' && inputs.artifact_path != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ format('{0}/{1}', inputs.working_directory, inputs.artifact_path) }}
