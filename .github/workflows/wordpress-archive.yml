@@ -225,7 +225,7 @@ jobs:
 
       - name: Set up PHP
         if: ${{ steps.detect.outputs.has_composer == 'true' }}
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ inputs.php_version }}
           extensions: ${{ inputs.php_extensions }}
