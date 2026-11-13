@@ -338,7 +338,7 @@ assert(qit.includes('args=("run:${QIT_TEST}"'), 'woo-qit.yml must run QIT with a
 
 const repositoryChecks = read('.github/workflows/_repository-checks.yml');
 assert(parseDocument(repositoryChecks).toJS().jobs.contracts.steps.find(step => step.name === 'Exercise runner shell failure paths').run.includes('npm run test:shell\nnpm run test:artifacts'), 'hosted contracts must execute artifact regressions as a separate command');
-assert(repositoryChecks.includes('zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e'), '_repository-checks.yml must pin zizmor');
+assert(repositoryChecks.includes('zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd'), '_repository-checks.yml must pin zizmor');
 assert(repositoryChecks.includes('npm run test:contracts'), '_repository-checks.yml must run contract tests');
 assert(repositoryChecks.includes('npm run doctor -- --fail-on high fixtures/wp-plugin'), '_repository-checks.yml must run the doctor fixture gate');
 assert(repositoryChecks.includes('npm run doctor:repo'), '_repository-checks.yml must run the repository doctor gate');
