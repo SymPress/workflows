@@ -18,9 +18,9 @@
     "test:release": "node scripts/test-braces-depth.mjs && node scripts/test-release-tooling.mjs"
   },
   "devDependencies": {
-    "braces": "file:./templates/automatic-release/sympress-bounded-braces-1.0.0.tgz",
     "actionlint": "^2.0.6",
-    "markdownlint-cli2": "^0.24.0",
+    "braces": "file:./templates/automatic-release/sympress-bounded-braces-1.0.0.tgz",
+    "markdownlint-cli2": "^0.24.1",
     "yaml": "^2.9.1"
   },
   "overrides": {
