@@ -73,6 +73,36 @@ on:
         type: boolean
         default: false
         required: false
+      node_build_paths:
+        description: Newline-separated directories, relative to each target, whose locked Node build runs after Composer install and before the checks.
+        type: string
+        default: ''
+        required: false
+      env_file_template:
+        description: File, relative to each target, copied to .env with mode 0600 before Composer install.
+        type: string
+        default: ''
+        required: false
+      run_sympress_runtime:
+        description: Run the sympress/runtime binary after Composer install to provision the WordPress runtime.
+        type: boolean
+        default: false
+        required: false
+      require_current_wordpress:
+        description: Fail unless composer.lock pins roots/wordpress to the current stable WordPress release.
+        type: boolean
+        default: false
+        required: false
+      require_clean_checkout:
+        description: Fail when install, build or QA changed tracked files.
+        type: boolean
+        default: false
+        required: false
+      require_private_repository:
+        description: Refuse to run unless the calling repository is private.
+        type: boolean
+        default: false
+        required: false
       timeout_minutes:
         description: Job timeout.
         type: number
@@ -94,6 +124,9 @@ on:
       ENV_VARS:
         description: JSON object or array of {name,value} variables to export.
         required: false
+      WORDFENCE_API_KEY:
+        description: Optional Wordfence Intelligence API key exported to QA for WordPress plugin audits.
+        required: false
 
 permissions:
   contents: read
@@ -106,6 +139,18 @@ jobs:
       targets: ${{ steps.targets.outputs.targets }}
       has_targets: ${{ steps.targets.outputs.has_targets }}
     steps:
+      - name: Require a private repository
+        if: ${{ inputs.require_private_repository }}
+        shell: bash
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          if [ "$REPOSITORY_PRIVATE" != "true" ]; then
+            echo "::error::This workflow is restricted to private repositories."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -232,6 +277,26 @@ jobs:
           tools: composer:v2, cs2pr
           coverage: none
 
+      - name: Create environment file
+        if: ${{ matrix.target != '__no_targets__' && inputs.env_file_template != '' }}
+        working-directory: ${{ matrix.target }}
+        shell: bash
+        env:
+          ENV_FILE_TEMPLATE: ${{ inputs.env_file_template }}
+        run: |
+          set -euo pipefail
+          case "$ENV_FILE_TEMPLATE" in
+            /*|..|../*|*/..|*/../*)
+              echo "::error::env_file_template must be a relative path inside the target."
+              exit 1
+              ;;
+          esac
+          if [ ! -f "$ENV_FILE_TEMPLATE" ]; then
+            echo "::error::env_file_template $ENV_FILE_TEMPLATE does not exist."
+            exit 1
+          fi
+          install -m 600 "$ENV_FILE_TEMPLATE" .env
+
       - name: Detect package manager
         id: package-manager
         if: ${{ matrix.target != '__no_targets__' && inputs.run_node_build }}
@@ -266,7 +331,7 @@ jobs:
           fi
 
       - name: Set up Node
-        if: ${{ matrix.target != '__no_targets__' && inputs.run_node_build && steps.package-manager.outputs.cache == '' }}
+        if: ${{ matrix.target != '__no_targets__' && (inputs.run_node_build || inputs.node_build_paths != '') && steps.package-manager.outputs.cache == '' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node_version }}
@@ -294,6 +359,29 @@ jobs:
           # shellcheck disable=SC2086
           composer install $COMPOSER_OPTIONS --no-scripts --no-plugins
 
+      - name: Require the current stable WordPress release
+        if: ${{ matrix.target != '__no_targets__' && inputs.require_current_wordpress }}
+        working-directory: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(curl -fsS --retry 3 --max-time 20 https://api.wordpress.org/core/version-check/1.7/ \
+            | jq -r '[.offers[] | select(.response == "upgrade" and (.version | test("^[1-9][0-9]*\\.[0-9]+(\\.[0-9]+)?$")))][0].version // empty')"
+          if [ -z "$latest" ]; then
+            echo "::error::Cannot determine the current stable WordPress release."
+            exit 1
+          fi
+          locked="$(jq -r '[.packages[]? | select(.name == "roots/wordpress")][0].version // empty' composer.lock)"
+          if [ -z "$locked" ]; then
+            echo "::error::composer.lock does not lock roots/wordpress."
+            exit 1
+          fi
+          if [ "${locked#v}" != "$latest" ]; then
+            echo "::error::roots/wordpress is locked at ${locked#v}; the current stable WordPress release is $latest. Update composer.lock."
+            exit 1
+          fi
+          echo "roots/wordpress $latest is the current stable WordPress release."
+
       - name: Run QA
         if: ${{ matrix.target != '__no_targets__' }}
         working-directory: ${{ matrix.target }}
@@ -301,7 +389,10 @@ jobs:
         env:
           COMPOSER_AUTH: ${{ !inputs.update_dependencies && secrets.COMPOSER_AUTH_JSON || '' }}
           NODE_AUTH_TOKEN: ${{ !inputs.update_dependencies && secrets.NPM_REGISTRY_TOKEN || '' }}
+          WORDFENCE_API_KEY: ${{ !inputs.update_dependencies && secrets.WORDFENCE_API_KEY || '' }}
           COMPOSER_OPTIONS: ${{ inputs.composer_options }}
+          NODE_BUILD_PATHS: ${{ inputs.node_build_paths }}
+          RUN_SYMPRESS_RUNTIME: ${{ inputs.run_sympress_runtime }}
           RUN_VALIDATE: ${{ inputs.run_validate }}
           RUN_AUDIT: ${{ inputs.run_audit }}
           RUN_PHPCS: ${{ inputs.run_phpcs }}
@@ -313,7 +404,7 @@ jobs:
           set -euo pipefail
           export CI=true
           if [ "${UPDATE_DEPENDENCIES:-false}" = "true" ]; then
-            unset COMPOSER_AUTH NODE_AUTH_TOKEN SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND
+            unset COMPOSER_AUTH NODE_AUTH_TOKEN WORDFENCE_API_KEY SSH_AUTH_SOCK SSH_AGENT_PID GIT_SSH_COMMAND
             test ! -e "$RUNNER_TEMP/composer-deploy-key"
             test ! -e "$RUNNER_TEMP/composer-known-hosts"
             # Register sniff packages explicitly: the update intentionally skips Composer plugins.
@@ -424,6 +515,27 @@ jobs:
             fi
           }
 
+          run_node_build_paths() {
+            local build_path
+            while IFS= read -r build_path; do
+              if [ -z "$build_path" ]; then
+                continue
+              fi
+              case "$build_path" in
+                /*|..|../*|*/..|*/../*)
+                  echo "::error::node_build_paths entries must be relative paths inside the target: $build_path"
+                  return 1
+                  ;;
+              esac
+              if [ ! -f "$build_path/package.json" ] \
+                || ! (cd "$build_path" && node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.build ? 0 : 1)"); then
+                echo "::error::$build_path has no package.json build script."
+                return 1
+              fi
+              (cd "$build_path" && run_node_build)
+            done <<< "${NODE_BUILD_PATHS:-}"
+          }
+
           run_phpcs() {
             if has_script "cs:audit"; then
               composer cs:audit
@@ -528,6 +640,18 @@ jobs:
             composer install $COMPOSER_OPTIONS
           fi
 
+          if [ "${RUN_SYMPRESS_RUNTIME:-false}" = "true" ]; then
+            runtime_bin="$(composer config bin-dir)"
+            runtime_bin="${runtime_bin%/}/runtime"
+            if [ ! -f "$runtime_bin" ]; then
+              echo "::error::run_sympress_runtime requires sympress/runtime ($runtime_bin is missing)."
+              exit 1
+            fi
+            php "$runtime_bin" --no-interaction
+          fi
+
+          run_node_build_paths
+
           if [ "$RUN_AUDIT" = "true" ]; then
             if [ -f composer.lock ]; then
               composer audit --locked --no-interaction
@@ -553,6 +677,12 @@ jobs:
           if [ "$RUN_NODE_BUILD" = "true" ]; then
             run_node_build
           fi
+
+      - name: Verify clean checkout
+        if: ${{ matrix.target != '__no_targets__' && inputs.require_clean_checkout }}
+        working-directory: ${{ matrix.target }}
+        shell: bash
+        run: git diff --exit-code -- .
 
       - name: Remove Composer SSH credentials
         if: ${{ always() }}
