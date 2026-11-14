@@ -1575,6 +1575,42 @@
           "default": false,
           "required": false
         },
+        "node_build_paths": {
+          "description": "Newline-separated directories, relative to each target, whose locked Node build runs after Composer install and before the checks.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "env_file_template": {
+          "description": "File, relative to each target, copied to .env with mode 0600 before Composer install.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
+        "run_sympress_runtime": {
+          "description": "Run the sympress/runtime binary after Composer install to provision the WordPress runtime.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "require_current_wordpress": {
+          "description": "Fail unless composer.lock pins roots/wordpress to the current stable WordPress release.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "require_clean_checkout": {
+          "description": "Fail when install, build or QA changed tracked files.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
+        "require_private_repository": {
+          "description": "Refuse to run unless the calling repository is private.",
+          "type": "boolean",
+          "default": false,
+          "required": false
+        },
         "timeout_minutes": {
           "description": "Job timeout.",
           "type": "number",
@@ -1601,6 +1637,10 @@
         },
         "ENV_VARS": {
           "description": "JSON object or array of {name,value} variables to export.",
+          "required": false
+        },
+        "WORDFENCE_API_KEY": {
+          "description": "Optional Wordfence Intelligence API key exported to QA for WordPress plugin audits.",
           "required": false
         }
       },
