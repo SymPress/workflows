@@ -1,0 +1,10 @@
+{
+    "name": "sympress/fixture-application",
+    "description": "Root application fixture for SymPress QA.",
+    "type": "project",
+    "license": "GPL-2.0-or-later",
+    "require": {},
+    "scripts": {
+        "qa": "@php -r \"exit(is_file('.env') && (fileperms('.env') & 0777) === 0600 && is_file('theme/build/ok.txt') ? 0 : 1);\""
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "sympress-fixture-theme",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"require('fs').mkdirSync('build', { recursive: true }); require('fs').writeFileSync('build/ok.txt', 'ok');\""
+  }
+}
