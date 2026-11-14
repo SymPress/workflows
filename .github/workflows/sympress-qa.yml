@@ -126,13 +126,16 @@ jobs:
             targets+=(".")
           fi
 
-          # shellcheck disable=SC2086
-          for composer_file in ${PACKAGE_GLOB}/composer.json; do
-            target="${composer_file%/composer.json}"
-            if [ "$target" != "." ]; then
-              targets+=("$target")
-            fi
-          done
+          # An empty glob limits discovery to the root.
+          if [ -n "$PACKAGE_GLOB" ]; then
+            # shellcheck disable=SC2086
+            for composer_file in ${PACKAGE_GLOB}/composer.json; do
+              target="${composer_file%/composer.json}"
+              if [ "$target" != "." ]; then
+                targets+=("$target")
+              fi
+            done
+          fi
 
           if [ "${#targets[@]}" -eq 0 ]; then
             echo 'targets=["__no_targets__"]' >> "$GITHUB_OUTPUT"
