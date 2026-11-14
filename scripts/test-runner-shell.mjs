@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -287,6 +287,85 @@ esac`);
   assert.equal(run(step('ddev-playwright.yml', 'Remove install credentials').run, gateEnvironment).status, 0);
   assert.equal(existsSync(path.join(root, '.ddev/config.install-auth.yaml')), false);
   assert.equal(existsSync(path.join(root, '.ddev/docker-compose.install-auth.yaml')), false);
+  checks += 2;
+  // Root application inputs: each gate runs only its own step and fails closed.
+  const app = path.join(root, 'application');
+  mkdirSync(path.join(app, 'theme'), { recursive: true });
+  const runApp = (script, env = {}) => spawnSync('bash', ['-c', script], {
+    cwd: app, encoding: 'utf8', env: { ...defaults, ...gateEnvironment, ...env }, timeout: 10000,
+  });
+  writeFileSync(path.join(app, 'composer.json'), '{}');
+  writeFileSync(output, '');
+  assert.equal(runApp(step('sympress-qa.yml', 'Discover Composer targets').run, { PACKAGE_GLOB: '', INCLUDE_ROOT: 'true' }).status, 0);
+  assert.match(readFileSync(output, 'utf8'), /^targets=\["\."\]$/m);
+  checks++;
+  const privateGuard = step('sympress-qa.yml', 'Require a private repository');
+  for (const [value, expected] of [['true', 0], ['false', 1], ['', 1]]) {
+    assert.equal(runApp(privateGuard.run, { REPOSITORY_PRIVATE: value }).status, expected, `private=${value}`);
+    checks++;
+  }
+  const envFile = step('sympress-qa.yml', 'Create environment file');
+  writeFileSync(path.join(app, '.env.example'), 'APP_ENV=ci\n', { mode: 0o644 });
+  assert.equal(runApp(envFile.run, { ENV_FILE_TEMPLATE: '.env.example' }).status, 0);
+  assert.equal(readFileSync(path.join(app, '.env'), 'utf8'), 'APP_ENV=ci\n');
+  assert.equal(statSync(path.join(app, '.env')).mode & 0o777, 0o600);
+  rmSync(path.join(app, '.env'));
+  for (const template of ['../.env.example', '/etc/hostname', 'nested/../../x', 'missing.env']) {
+    assert.equal(runApp(envFile.run, { ENV_FILE_TEMPLATE: template }).status, 1, template);
+    assert.equal(existsSync(path.join(app, '.env')), false);
+    checks++;
+  }
+  const wordpress = step('sympress-qa.yml', 'Require the current stable WordPress release');
+  executable(path.join(root, 'fake-bin/curl'), `test -n "\${CURL_FAIL:-}" && exit 22
+echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"upgrade","version":"7.1.4"},{"response":"upgrade","version":"7.0.9"}]}'`);
+  for (const [lock, env, expected] of [
+    [{ packages: [{ name: 'roots/wordpress', version: '7.1.4' }] }, {}, 0],
+    [{ packages: [{ name: 'roots/wordpress', version: 'v7.1.4' }] }, {}, 0],
+    [{ packages: [{ name: 'roots/wordpress', version: '7.1.3' }] }, {}, 1],
+    [{ packages: [{ name: 'roots/wordpress-no-content', version: '7.1.4' }] }, {}, 1],
+    [{ packages: [{ name: 'roots/wordpress', version: '7.1.4' }] }, { CURL_FAIL: '1' }, 1],
+  ]) {
+    writeFileSync(path.join(app, 'composer.lock'), JSON.stringify(lock));
+    assert.equal(runApp(wordpress.run, env).status === 0, expected === 0, JSON.stringify([lock, env]));
+    checks++;
+  }
+  executable(path.join(root, 'fake-bin/composer'), 'if [ "$1" = config ]; then echo vendor/bin; fi; exit 0');
+  executable(path.join(root, 'fake-bin/npm'), 'printf "%s %s\\n" "$1" "$2" >> "$CALLS"');
+  executable(path.join(root, 'fake-bin/php'), 'printf "php %s\\n" "$*" >> "$CALLS"');
+  executable(path.join(root, 'fake-bin/node'), `exec "${process.execPath}" "$@"`);
+  const calls = path.join(app, 'calls');
+  const appFlags = { ...flags, RUN_PHPCS: 'false', RUN_PHPSTAN: 'false', RUN_PHPUNIT: 'false', CALLS: calls };
+  const appRun = (env) => { rmSync(calls, { force: true }); return runApp(qa.run, { ...appFlags, ...env }); };
+  writeFileSync(path.join(app, 'theme/package.json'), '{"scripts":{"build":"tsc"}}');
+  writeFileSync(path.join(app, 'theme/package-lock.json'), '{}');
+  const built = appRun({ NODE_BUILD_PATHS: "\ntheme\n" });
+  assert.equal(built.status, 0, built.stdout + built.stderr);
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split('\n'), ['ci ', 'run build']);
+  checks++;
+  for (const paths of ['../theme', '/tmp', 'theme/../..', 'missing']) {
+    assert.equal(appRun({ NODE_BUILD_PATHS: paths }).status, 1, paths);
+    assert.equal(existsSync(calls), false);
+    checks++;
+  }
+  writeFileSync(path.join(app, 'theme/package.json'), '{"scripts":{}}');
+  assert.equal(appRun({ NODE_BUILD_PATHS: 'theme' }).status, 1, 'listed path without build script');
+  rmSync(path.join(app, 'theme/package-lock.json'));
+  writeFileSync(path.join(app, 'theme/package.json'), '{"scripts":{"build":"tsc"}}');
+  assert.equal(appRun({ NODE_BUILD_PATHS: 'theme' }).status, 1, 'listed path without lockfile');
+  assert.equal(appRun({ RUN_SYMPRESS_RUNTIME: 'true' }).status, 1, 'runtime binary missing');
+  mkdirSync(path.join(app, 'vendor/bin'), { recursive: true });
+  writeFileSync(path.join(app, 'vendor/bin/runtime'), '');
+  assert.equal(appRun({ RUN_SYMPRESS_RUNTIME: 'true' }).status, 0);
+  assert.equal(readFileSync(calls, 'utf8'), 'php vendor/bin/runtime --no-interaction\n');
+  checks += 4;
+  const clean = step('sympress-qa.yml', 'Verify clean checkout');
+  rmSync(path.join(root, 'fake-bin/git'));
+  for (const command of [['init', '-q'], ['add', 'composer.json'], ['-c', 'user.name=ci', '-c', 'user.email=ci@example.com', 'commit', '-qm', 'fixture']]) {
+    assert.equal(spawnSync('git', command, { cwd: app }).status, 0);
+  }
+  assert.equal(runApp(clean.run).status, 0);
+  writeFileSync(path.join(app, 'composer.json'), '{"changed":true}');
+  assert.equal(runApp(clean.run).status, 1);
   checks += 2;
   console.log(`Passed ${checks} actual Bash runner cases.`);
 } finally {

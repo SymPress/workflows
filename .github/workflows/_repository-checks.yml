@@ -134,6 +134,16 @@ jobs:
       package_glob: fixtures/monorepo/packages/*
       run_audit: false
 
+  fixture-application-qa:
+    name: Fixture application QA
+    uses: ./.github/workflows/sympress-qa.yml
+    with:
+      include_root: false
+      package_glob: fixtures/application
+      env_file_template: .env.example
+      node_build_paths: theme
+      require_clean_checkout: true
+
   fixture-archive:
     name: Fixture WordPress archive
     permissions:

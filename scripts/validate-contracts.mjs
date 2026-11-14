@@ -224,6 +224,7 @@ for (const [file, gate] of [
 }
 
 const sympressQa = read('.github/workflows/sympress-qa.yml');
+const repositoryChecks = read('.github/workflows/_repository-checks.yml');
 const dependencyCanary = parseDocument(read('.github/workflows/dependency-canary.yml')).toJS();
 assert(dependencyCanary.jobs.qa.with.update_dependencies === true, 'dependency canary must resolve current permitted dependencies');
 assert(dependencyCanary.jobs.qa.permissions.contents === 'read' && !dependencyCanary.jobs.qa.permissions.issues, 'canary build must not receive issue write permission');
@@ -245,6 +246,25 @@ for (const [flag, command] of [
   assert(sympressQa.includes(block), `sympress-qa.yml must gate ${command} only with ${flag}`);
 }
 assert(sympressQa.includes('&& has_script "qa"'), 'sympress-qa.yml may run aggregate QA only when every gate is enabled');
+const sympressQaWorkflow = parseDocument(sympressQa).toJS();
+const sympressQaInputs = sympressQaWorkflow.on.workflow_call.inputs;
+for (const [input, type, fallback] of [
+  ['node_build_paths', 'string', ''],
+  ['env_file_template', 'string', ''],
+  ['run_sympress_runtime', 'boolean', false],
+  ['require_current_wordpress', 'boolean', false],
+  ['require_clean_checkout', 'boolean', false],
+  ['require_private_repository', 'boolean', false],
+]) {
+  assert(sympressQaInputs[input]?.type === type && sympressQaInputs[input].default === fallback, `sympress-qa.yml ${input} must be an opt-in ${type}`);
+}
+assert(sympressQaWorkflow.jobs.discover.steps[0].name === 'Require a private repository', 'private repository guard must run before any checkout');
+assert(sympressQaWorkflow.jobs.discover.steps[0].env.REPOSITORY_PRIVATE === '${{ github.event.repository.private }}', 'private repository guard must read the caller event');
+assert(sympressQa.includes("WORDFENCE_API_KEY: ${{ !inputs.update_dependencies && secrets.WORDFENCE_API_KEY || '' }}"), 'Wordfence key must not reach Canary QA');
+const applicationCaller = parseDocument(repositoryChecks).toJS().jobs['fixture-application-qa'];
+for (const input of ['env_file_template', 'node_build_paths', 'require_clean_checkout']) {
+  assert(applicationCaller?.with?.[input], `Application QA fixture must exercise ${input}`);
+}
 
 const deploy = read('.github/workflows/deploy-deployer.yml');
 assert(deploy.includes('environment: ${{ inputs.environment }}'), 'deploy-deployer.yml must bind GitHub environments');
@@ -336,7 +356,6 @@ assert(qit.includes('qit_sha256'), 'woo-qit.yml must support optional QIT checks
 assert(qit.includes('QIT_TEST'), 'woo-qit.yml must pass qit_test through env');
 assert(qit.includes('args=("run:${QIT_TEST}"'), 'woo-qit.yml must run QIT with an argv array');
 
-const repositoryChecks = read('.github/workflows/_repository-checks.yml');
 assert(parseDocument(repositoryChecks).toJS().jobs.contracts.steps.find(step => step.name === 'Exercise runner shell failure paths').run.includes('npm run test:shell\nnpm run test:artifacts'), 'hosted contracts must execute artifact regressions as a separate command');
 assert(repositoryChecks.includes('zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd'), '_repository-checks.yml must pin zizmor');
 assert(repositoryChecks.includes('npm run test:contracts'), '_repository-checks.yml must run contract tests');
