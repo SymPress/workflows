@@ -367,6 +367,58 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   writeFileSync(path.join(app, 'composer.json'), '{"changed":true}');
   assert.equal(runApp(clean.run).status, 1);
   checks += 2;
+  const distribute = path.join(root, 'distribute');
+  const git = (cwd, ...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.com', ...args], { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const origin = path.join(distribute, 'origin.git');
+  const seed = path.join(distribute, 'seed');
+  mkdirSync(seed, { recursive: true });
+  git(distribute, 'init', '-q', '--bare', origin);
+  git(seed, 'init', '-q');
+  writeFileSync(path.join(seed, 'plugin.php'), '<?php // build output\n');
+  git(seed, 'add', '-A');
+  git(seed, 'commit', '-qm', 'previous build');
+  git(seed, 'push', '-q', origin, 'HEAD:refs/heads/main');
+  writeFileSync(path.join(seed, 'plugin.php'), '<?php // source\n');
+  git(seed, 'commit', '-qam', 'source');
+  git(seed, 'push', '-q', origin, 'HEAD:refs/heads/dev/main');
+  const previousBuild = git(origin, 'rev-parse', 'main');
+  const distributeRun = (cwd, name, env) => spawnSync('bash', ['-c', step('build-and-distribute.yml', name).run], {
+    cwd, encoding: 'utf8', timeout: 10000, env: { ...process.env, RUNNER_TEMP: distribute, GITHUB_OUTPUT: output, GITHUB_REF_NAME: 'dev/main', GITHUB_REPOSITORY: 'example/repo', ...env },
+  });
+  const build = path.join(distribute, 'build');
+  git(distribute, 'clone', '-q', '--branch', 'dev/main', origin, build);
+  const sourceSha = git(build, 'rev-parse', 'HEAD');
+  const buildEnv = { SOURCE_SHA: sourceSha, BUILT_BRANCH: 'main', EXISTING_BUILD: 'false' };
+  assert.equal(distributeRun(build, 'Checkout build branch', buildEnv).status, 0);
+  writeFileSync(path.join(build, 'app.js'), 'compiled();\n');
+  writeFileSync(output, '');
+  const bundled = distributeRun(build, 'Bundle build branch tree', buildEnv);
+  assert.equal(bundled.status, 0, bundled.stderr);
+  const buildTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
+  const push = path.join(distribute, 'push');
+  git(distribute, 'clone', '-q', origin, push);
+  const commitEnv = { BUILT_BRANCH: 'main', BUILD_TREE: buildTree, PACKAGE_VERSION: '1.0.0', GIT_EMAIL: '', GIT_NAME: '' };
+  assert.notEqual(distributeRun(push, 'Create build commit', { ...commitEnv, BUILD_TREE: '0'.repeat(40) }).status, 0, 'tree mismatch must fail');
+  writeFileSync(output, '');
+  const committed = distributeRun(push, 'Create build commit', commitEnv);
+  assert.equal(committed.status, 0, committed.stderr);
+  const commit = readFileSync(output, 'utf8').match(/^commit=(\w+)$/m)[1];
+  const hookMarker = path.join(distribute, 'hook-ran');
+  executable(path.join(push, '.git/hooks/pre-push'), `touch ${hookMarker}`);
+  const pushed = distributeRun(push, 'Push build branch', {
+    SSH_KEY: '', GITHUB_KNOWN_HOSTS: '', ALLOW_GITHUB_SSH_KEYSCAN: 'false', PUSH_TOKEN: '', BUILT_BRANCH: 'main', COMMIT: commit,
+    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `url.${origin}.insteadOf`, GIT_CONFIG_VALUE_0: 'https://github.com/example/repo.git',
+  });
+  assert.equal(pushed.status, 0, pushed.stderr);
+  assert.equal(existsSync(hookMarker), false, 'push must not run repository hooks');
+  assert.equal(git(origin, 'rev-parse', 'main^{tree}'), buildTree);
+  assert.equal(git(origin, 'rev-parse', 'main^'), previousBuild);
+  assert.equal(git(origin, 'show', 'main:app.js'), 'compiled();');
+  checks += 5;
   console.log(`Passed ${checks} actual Bash runner cases.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
