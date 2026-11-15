@@ -9,7 +9,7 @@ secrets are exposed.
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
     with:
       php_version: '8.5'
     secrets:
@@ -45,7 +45,8 @@ Use these refs intentionally:
 | `@v1` | Historical major alias; its history is preserved. |
 | `@main` | Adoption testing only. |
 
-The examples use reviewed commit `177fa0d727b278d2103052ec77c102b4a4c492a0`.
+The examples use the reviewed v1.3.0 release commit
+`8f03d8b2520e366e5d7cc3398e0c368ccb83e311`.
 Upgrade the pin after reviewing and testing the replacement commit.
 
 ## Permissions
@@ -163,11 +164,11 @@ Archive plus QIT:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 
   qit:
     needs: archive
-    uses: sympress/workflows/.github/workflows/woo-qit.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
     secrets:
@@ -182,7 +183,7 @@ Composer package:
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 ```
 
 WordPress plugin archive:
@@ -190,7 +191,7 @@ WordPress plugin archive:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
     with:
       package_version: ${{ github.ref_name }}
 ```
@@ -200,11 +201,11 @@ Focused PHP checks:
 ```yml
 jobs:
   phpcs:
-    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 
   phpstan:
-    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 
   phpunit:
-    uses: sympress/workflows/.github/workflows/php-unit.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/php-unit.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 ```
