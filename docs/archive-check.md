@@ -6,11 +6,11 @@ Use `wordpress-archive-check.yml` after `wordpress-archive.yml` or
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 
   archive-check:
     needs: archive
-    uses: sympress/workflows/.github/workflows/wordpress-archive-check.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+    uses: sympress/workflows/.github/workflows/wordpress-archive-check.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
 ```

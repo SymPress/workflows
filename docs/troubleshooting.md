@@ -5,7 +5,7 @@
 Check that the caller uses the full workflow path:
 
 ```yml
-uses: sympress/workflows/.github/workflows/sympress-qa.yml@177fa0d727b278d2103052ec77c102b4a4c492a0
+uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
 ```
 
 Callable workflows must live directly in `.github/workflows`.
