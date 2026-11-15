@@ -172,7 +172,7 @@ on:
         description: Git author name.
         required: false
       GITHUB_USER_SSH_KEY:
-        description: Optional SSH key used for checkout and push.
+        description: Optional SSH key used only by the job that pushes the build branch.
         required: false
       GITHUB_KNOWN_HOSTS:
         description: Trusted known_hosts entry for github.com when pushing via SSH.
@@ -205,16 +205,15 @@ jobs:
     name: Build and distribute
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    # Runs Composer, npm and build scripts, so it never receives push credentials.
     permissions:
-      contents: write
-    concurrency:
-      group: build-and-distribute-${{ github.repository }}-${{ github.ref }}
-      cancel-in-progress: false
+      contents: read
     outputs:
       artifact: ${{ steps.package.outputs.artifact }}
       built_branch: ${{ steps.metadata.outputs.built_branch }}
       package_version: ${{ steps.metadata.outputs.package_version }}
       skipped_existing_build: ${{ steps.existing-build.outputs.exists }}
+      build_tree: ${{ steps.bundle.outputs.tree }}
     env:
       COMPOSER_MIRROR_PATH_REPOS: 1
       NODE_OPTIONS: ${{ inputs.node_options }}
@@ -226,40 +225,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Start SSH agent
-        env:
-          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
-        if: ${{ env.SSH_KEY != '' }}
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
-        with:
-          ssh-private-key: ${{ env.SSH_KEY }}
-
-      - name: Configure push remote
-        shell: bash
-        env:
-          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
-          GITHUB_KNOWN_HOSTS: ${{ secrets.GITHUB_KNOWN_HOSTS }}
-          ALLOW_GITHUB_SSH_KEYSCAN: ${{ inputs.allow_github_ssh_keyscan }}
-          PUSH_TOKEN: ${{ secrets.GITHUB_USER_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -n "$SSH_KEY" ]; then
-            mkdir -p ~/.ssh
-            touch ~/.ssh/known_hosts
-            chmod 600 ~/.ssh/known_hosts
-            if [ -n "$GITHUB_KNOWN_HOSTS" ]; then
-              printf '%s\n' "$GITHUB_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-            elif [ "$ALLOW_GITHUB_SSH_KEYSCAN" = "true" ]; then
-              ssh-keyscan github.com >> ~/.ssh/known_hosts
-            else
-              echo "::error::GITHUB_KNOWN_HOSTS is required for SSH push unless allow_github_ssh_keyscan=true is explicitly set."
-              exit 1
-            fi
-            git remote set-url origin "git@github.com:${{ github.repository }}.git"
-          elif [ -n "$PUSH_TOKEN" ]; then
-            git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git"
-          fi
 
       - name: Configure Git author
         shell: bash
@@ -367,12 +332,12 @@ jobs:
             exit 0
           fi
 
-          if ! git ls-remote --exit-code --heads origin "$BUILT_BRANCH" >/dev/null 2>&1; then
+          # Checkout with fetch-depth 0 already fetched every branch; no credentials needed.
+          if ! git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH" >/dev/null; then
             exit 0
           fi
 
-          git fetch --depth=1 origin "$BUILT_BRANCH"
-          if git grep -Eq "(^|[[:space:]])SHA:[[:space:]]*$SOURCE_SHA([[:space:]]|$)" FETCH_HEAD -- '*.php' 'style.css' 2>/dev/null; then
+          if git grep -Eq "(^|[[:space:]])SHA:[[:space:]]*$SOURCE_SHA([[:space:]]|$)" "refs/remotes/origin/$BUILT_BRANCH" -- '*.php' 'style.css' 2>/dev/null; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -386,13 +351,11 @@ jobs:
           set -euo pipefail
 
           if [ "$EXISTING_BUILD" = "true" ]; then
-            git fetch --depth=1 origin "$BUILT_BRANCH"
             git checkout -B "$BUILT_BRANCH" "origin/$BUILT_BRANCH"
             exit 0
           fi
 
-          if git ls-remote --exit-code --heads origin "$BUILT_BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$BUILT_BRANCH"
+          if git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH" >/dev/null; then
             git checkout -B "$BUILT_BRANCH" "origin/$BUILT_BRANCH"
             git rm -rf . >/dev/null 2>&1 || true
             git clean -ffdx
@@ -803,22 +766,37 @@ jobs:
 
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
 
-      - name: Commit build branch
+      - name: Bundle build branch tree
+        id: bundle
         if: ${{ steps.existing-build.outputs.exists != 'true' }}
         shell: bash
         env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
           BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
-          PACKAGE_VERSION: ${{ steps.metadata.outputs.package_version }}
         run: |
           set -euo pipefail
           git add -A
-          if git diff --cached --quiet; then
-            echo "No build branch changes to commit."
-            exit 0
+          tree="$(git write-tree)"
+          bases=("$SOURCE_SHA")
+          parents=(-p "$SOURCE_SHA")
+          if git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH" >/dev/null; then
+            bases+=("refs/remotes/origin/$BUILT_BRANCH")
+            parents+=(-p "refs/remotes/origin/$BUILT_BRANCH")
           fi
+          # Bases only keep the bundle thin; the push job commits the tree onto the live branch tip.
+          git update-ref refs/sympress/build-tree "$(git commit-tree "$tree" "${parents[@]}" -m "Build tree")"
+          mkdir -p "$RUNNER_TEMP/build-tree"
+          git bundle create "$RUNNER_TEMP/build-tree/build-tree.bundle" refs/sympress/build-tree --not "${bases[@]}"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
 
-          git commit -m "Build artifact ${PACKAGE_VERSION} from ${GITHUB_REF_NAME}" --no-verify
-          git push origin "HEAD:${BUILT_BRANCH}"
+      - name: Upload build branch tree
+        if: ${{ steps.existing-build.outputs.exists != 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.package.outputs.artifact }}-build-tree
+          path: ${{ runner.temp }}/build-tree/build-tree.bundle
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload build artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -827,6 +805,108 @@ jobs:
           path: ${{ format('{0}/.artifact/*', inputs.working_directory) }}
           include-hidden-files: true
           compression-level: 9
+
+  push-build-branch:
+    name: Push build branch
+    needs: build-and-distribute
+    if: ${{ needs.build-and-distribute.outputs.skipped_existing_build != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    # Holds the push credentials, so it never runs project code: only git on the bundled tree.
+    permissions:
+      contents: write
+    concurrency:
+      group: build-and-distribute-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download build branch tree
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.build-and-distribute.outputs.artifact }}-build-tree
+          path: ${{ runner.temp }}/build-tree
+
+      - name: Create build commit
+        id: commit
+        shell: bash
+        env:
+          BUILT_BRANCH: ${{ needs.build-and-distribute.outputs.built_branch }}
+          BUILD_TREE: ${{ needs.build-and-distribute.outputs.build_tree }}
+          PACKAGE_VERSION: ${{ needs.build-and-distribute.outputs.package_version }}
+          GIT_EMAIL: ${{ secrets.GITHUB_USER_EMAIL }}
+          GIT_NAME: ${{ secrets.GITHUB_USER_NAME }}
+        run: |
+          set -euo pipefail
+          git config core.hooksPath /dev/null
+          git config user.email "${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+          git config user.name "${GIT_NAME:-github-actions[bot]}"
+          bundle="$RUNNER_TEMP/build-tree/build-tree.bundle"
+          git bundle verify --quiet "$bundle"
+          git -c transfer.fsckObjects=true fetch --no-tags "$bundle" "refs/sympress/build-tree:refs/sympress/build-tree"
+          tree="$(git rev-parse "refs/sympress/build-tree^{tree}")"
+          if [ "$tree" != "$BUILD_TREE" ]; then
+            echo "::error::Build branch tree $tree does not match the tree $BUILD_TREE reported by the build job."
+            exit 1
+          fi
+
+          parents=()
+          if base="$(git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH^{commit}")"; then
+            if [ "$(git rev-parse "$base^{tree}")" = "$tree" ]; then
+              echo "No build branch changes to commit."
+              echo "commit=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            parents=(-p "$base")
+          fi
+          commit="$(git commit-tree "$tree" "${parents[@]}" -m "Build artifact ${PACKAGE_VERSION} from ${GITHUB_REF_NAME}")"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Start SSH agent
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+        if: ${{ steps.commit.outputs.commit != '' && env.SSH_KEY != '' }}
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
+        with:
+          ssh-private-key: ${{ env.SSH_KEY }}
+
+      - name: Push build branch
+        if: ${{ steps.commit.outputs.commit != '' }}
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.GITHUB_USER_SSH_KEY }}
+          GITHUB_KNOWN_HOSTS: ${{ secrets.GITHUB_KNOWN_HOSTS }}
+          ALLOW_GITHUB_SSH_KEYSCAN: ${{ inputs.allow_github_ssh_keyscan }}
+          PUSH_TOKEN: ${{ secrets.GITHUB_USER_TOKEN }}
+          BUILT_BRANCH: ${{ needs.build-and-distribute.outputs.built_branch }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+        run: |
+          set -euo pipefail
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          push_config=(-c core.hooksPath=/dev/null)
+          if [ -n "$SSH_KEY" ]; then
+            mkdir -p ~/.ssh
+            touch ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+            if [ -n "$GITHUB_KNOWN_HOSTS" ]; then
+              printf '%s\n' "$GITHUB_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+            elif [ "$ALLOW_GITHUB_SSH_KEYSCAN" = "true" ]; then
+              ssh-keyscan github.com >> ~/.ssh/known_hosts
+            else
+              echo "::error::GITHUB_KNOWN_HOSTS is required for SSH push unless allow_github_ssh_keyscan=true is explicitly set."
+              exit 1
+            fi
+            remote="git@github.com:${GITHUB_REPOSITORY}.git"
+          elif [ -n "$PUSH_TOKEN" ]; then
+            # The helper reads the token from this step's environment; it never lands in .git/config or argv.
+            # shellcheck disable=SC2016
+            push_config+=(-c credential.helper= -c 'credential.helper=!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$PUSH_TOKEN"; }; f')
+          fi
+          GIT_TERMINAL_PROMPT=0 git "${push_config[@]}" push --no-verify "$remote" "$COMMIT:refs/heads/$BUILT_BRANCH"
 
   artifact-attestation:
     name: Attest artifact manifest
