@@ -402,7 +402,7 @@
           "required": false
         },
         "GITHUB_USER_SSH_KEY": {
-          "description": "Optional SSH key used for checkout and push.",
+          "description": "Optional SSH key used only by the job that pushes the build branch.",
           "required": false
         },
         "GITHUB_KNOWN_HOSTS": {
