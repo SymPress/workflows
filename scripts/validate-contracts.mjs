@@ -206,6 +206,17 @@ for (const file of ['.github/workflows/build-and-distribute.yml', '.github/workf
 const buildAndDistribute = read('.github/workflows/build-and-distribute.yml');
 assert(buildAndDistribute.includes('GITHUB_KNOWN_HOSTS'), 'build-and-distribute.yml must support pinned GitHub known_hosts');
 assert(buildAndDistribute.includes('allow_github_ssh_keyscan'), 'build-and-distribute.yml must gate github.com ssh-keyscan fallback');
+const buildAndDistributeJobs = parseDocument(buildAndDistribute).toJS().jobs;
+const buildJob = JSON.stringify(buildAndDistributeJobs['build-and-distribute']);
+const pushJob = JSON.stringify(buildAndDistributeJobs['push-build-branch'] ?? '');
+for (const secret of ['GITHUB_USER_TOKEN', 'GITHUB_USER_SSH_KEY', 'GITHUB_KNOWN_HOSTS']) {
+  assert(!buildJob.includes(secret), `build-and-distribute.yml must keep ${secret} out of the job that runs build scripts`);
+}
+assert(buildAndDistributeJobs['build-and-distribute'].permissions.contents === 'read', 'build-and-distribute.yml build job must stay read-only');
+for (const required of ['core.hooksPath=/dev/null', 'push --no-verify', 'transfer.fsckObjects=true']) {
+  assert(pushJob.includes(required), `build-and-distribute.yml push job must contain ${required}`);
+}
+assert(!/composer|npm|pnpm|yarn|php-scoper|pre_script/.test(pushJob), 'build-and-distribute.yml push job must not run project code');
 
 for (const [file, gate] of [
   ['.github/workflows/build-and-distribute.yml', 'allow_inline_scripts'],
