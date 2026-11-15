@@ -60,6 +60,23 @@ the generated `artifact-manifest.json`. The caller job must grant
 `pre_script` is disabled by default. Set `allow_inline_scripts: true` only when
 the caller repository is trusted.
 
+## Push Isolation
+
+The workflow runs two jobs. `Build and distribute` checks out the source,
+installs dependencies, runs Composer, Node, asset compiler, scoper and
+`pre_script` steps, and uploads the artifact. It has `contents: read` and never
+receives `GITHUB_USER_TOKEN`, `GITHUB_USER_SSH_KEY` or `GITHUB_KNOWN_HOSTS`. It
+hands the build branch tree to the next job as a thin Git bundle artifact named
+`<artifact>-build-tree`, kept for one day.
+
+`Push build branch` runs no project code. It verifies the bundle, checks that
+its tree matches the one reported by the build job, commits that tree onto the
+current build branch tip and pushes it. The credentials exist only in that job:
+the token is passed through a step-scoped credential helper and never written
+to `.git/config`, the SSH key is loaded only there, and Git hooks are disabled
+with `core.hooksPath=/dev/null` and `--no-verify`. Pushes for the same ref are
+serialized; builds are not.
+
 When pushing with `GITHUB_USER_SSH_KEY`, provide `GITHUB_KNOWN_HOSTS` for
 `github.com`. The `allow_github_ssh_keyscan` fallback is available only as an
 explicit trust-on-first-use escape hatch.
