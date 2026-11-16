@@ -392,7 +392,8 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   const build = path.join(distribute, 'build');
   git(distribute, 'clone', '-q', '--branch', 'dev/main', origin, build);
   const sourceSha = git(build, 'rev-parse', 'HEAD');
-  const buildEnv = { SOURCE_SHA: sourceSha, BUILT_BRANCH: 'main', EXISTING_BUILD: 'false' };
+  const buildEnv = { SOURCE_SHA: sourceSha, BUILT_BRANCH: 'main', EXISTING_BUILD: 'false', GIT_EMAIL: '', GIT_NAME: '' };
+  assert.equal(distributeRun(build, 'Configure Git author', buildEnv).status, 0);
   assert.equal(distributeRun(build, 'Checkout build branch', buildEnv).status, 0);
   writeFileSync(path.join(build, 'app.js'), 'compiled();\n');
   writeFileSync(output, '');
