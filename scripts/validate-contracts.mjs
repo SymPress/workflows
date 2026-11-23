@@ -472,6 +472,15 @@ for (const file of ['sympress-qa.yml', 'composer-validate.yml']) {
   assert(text.includes('Remove Composer SSH credentials\n        if: ${{ always() }}'), `${file} must clean up SSH credentials on failure`);
 }
 
+for (const file of ['playwright.yml', 'javascript-unit.yml', 'javascript-static-analysis.yml', 'wp-scripts-lint.yml']) {
+  const steps = Object.values(parseDocument(read(`.github/workflows/${file}`)).toJS().jobs).flatMap(job => job.steps || []);
+  const agent = steps.findIndex(item => String(item.uses).startsWith('webfactory/ssh-agent@'));
+  const install = steps.findIndex(item => /^Install (Node )?dependencies$/.test(item.name));
+  const cleanup = steps[install + 1];
+  assert(agent !== -1 && agent < install, `${file} must load the SSH key before installing dependencies`);
+  assert(cleanup?.name === 'Remove SSH key from agent' && cleanup.run === 'ssh-add -D', `${file} must drop the SSH key right after installing dependencies`);
+}
+
 if (failures.length > 0) {
   console.error('Contract validation failed:');
   for (const failure of failures) {
