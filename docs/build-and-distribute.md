@@ -5,7 +5,7 @@ Use `build-and-distribute.yml` when a source branch should produce a compiled bu
 ```yml
 jobs:
   build:
-    uses: sympress/workflows/.github/workflows/build-and-distribute.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/build-and-distribute.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       source_branch_prefix: dev/
     secrets:

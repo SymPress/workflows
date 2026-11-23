@@ -31,7 +31,7 @@ permissions:
 jobs:
   website-ci:
     name: Website CI
-    uses: sympress/workflows/.github/workflows/composer-validate.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/composer-validate.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       install: true
       audit: false
@@ -41,7 +41,7 @@ jobs:
 
   package-ci:
     name: Package CI
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       include_root: false
       package_glob: packages/*
