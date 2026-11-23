@@ -5,7 +5,7 @@ Use `ddev-playwright.yml` for SymPress Starter projects or other DDEV-backed Wor
 ```yml
 jobs:
   e2e:
-    uses: sympress/workflows/.github/workflows/ddev-playwright.yml@<release-sha> # v2.0.0
+    uses: sympress/workflows/.github/workflows/ddev-playwright.yml@4d668133403d357d8335fdbfb850bb13a9105ece # v2.0.0
     with:
       php_version: '8.5'
       node_version: '24'

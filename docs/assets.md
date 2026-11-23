@@ -5,7 +5,7 @@ Use `assets-build.yml` for Composer asset compiler builds, Node builds, or both.
 ```yml
 jobs:
   assets:
-    uses: sympress/workflows/.github/workflows/assets-build.yml@<release-sha> # v2.0.0
+    uses: sympress/workflows/.github/workflows/assets-build.yml@4d668133403d357d8335fdbfb850bb13a9105ece # v2.0.0
     with:
       working_directory: .
       run_asset_compiler: true
