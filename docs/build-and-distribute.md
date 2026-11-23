@@ -85,7 +85,9 @@ would start. The credentials exist only in that job:
 the token is passed through a step-scoped credential helper and never written
 to `.git/config`, the SSH key is loaded only there, and Git hooks are disabled
 with `core.hooksPath=/dev/null` and `--no-verify`. Pushes for the same ref are
-serialized; builds are not.
+serialized; builds are not. When the source branch has moved past the built
+commit by the time its push job starts, that job skips the push, so an older
+build that finishes late cannot cover a newer one.
 
 When pushing with `GITHUB_USER_SSH_KEY`, provide `GITHUB_KNOWN_HOSTS` for
 `github.com`. The `allow_github_ssh_keyscan` fallback is available only as an
