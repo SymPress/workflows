@@ -384,6 +384,8 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   git(seed, 'push', '-q', origin, 'HEAD:refs/heads/main');
   writeFileSync(path.join(seed, 'plugin.php'), '<?php // source\n');
   writeFileSync(path.join(seed, '.gitignore'), 'build/\n');
+  mkdirSync(path.join(seed, '.github/workflows'), { recursive: true });
+  writeFileSync(path.join(seed, '.github/workflows/ci.yml'), 'on: pull_request\n');
   git(seed, 'add', '-A');
   git(seed, 'commit', '-qm', 'source');
   git(seed, 'push', '-q', origin, 'HEAD:refs/heads/dev/main');
@@ -407,13 +409,17 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   });
   assert.equal(packaged.status, 0, packaged.stderr);
   const stageDir = readFileSync(output, 'utf8').match(/^stage_dir=(.+)$/m)[1];
+  // A build job with root on the runner can put anything into the staged tree.
+  mkdirSync(path.join(build, stageDir, '.github/workflows'), { recursive: true });
+  writeFileSync(path.join(build, stageDir, '.github/workflows/ci.yml'), 'on: push\n');
+  writeFileSync(path.join(build, stageDir, '.github/workflows/pwn.yml'), 'on: push\n');
   writeFileSync(output, '');
   const bundled = distributeRun(build, 'Bundle build branch tree', { ...buildEnv, WD: '.', STAGE_DIR: stageDir });
   assert.equal(bundled.status, 0, bundled.stderr);
   const buildTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
   const push = path.join(distribute, 'push');
   git(distribute, 'clone', '-q', origin, push);
-  const commitEnv = { BUILT_BRANCH: 'main', BUILD_TREE: buildTree, PACKAGE_VERSION: '1.0.0', GIT_EMAIL: '', GIT_NAME: '' };
+  const commitEnv = { BUILT_BRANCH: 'main', BUILD_TREE: buildTree, PACKAGE_VERSION: '1.0.0', GIT_EMAIL: '', GIT_NAME: '', GITHUB_SHA: sourceSha };
   assert.notEqual(distributeRun(push, 'Create build commit', { ...commitEnv, BUILD_TREE: '0'.repeat(40) }).status, 0, 'tree mismatch must fail');
   writeFileSync(output, '');
   const committed = distributeRun(push, 'Create build commit', commitEnv);
@@ -427,11 +433,11 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   });
   assert.equal(pushed.status, 0, pushed.stderr);
   assert.equal(existsSync(hookMarker), false, 'push must not run repository hooks');
-  assert.equal(git(origin, 'rev-parse', 'main^{tree}'), buildTree);
   assert.equal(git(origin, 'rev-parse', 'main^'), previousBuild);
   assert.equal(git(origin, 'show', 'main:build/app.js'), 'compiled();', 'ignored build output must reach the build branch');
   const branchFiles = git(origin, 'ls-tree', '-r', '--name-only', 'main').split('\n');
-  for (const excluded of ['.npmrc', 'artifact-manifest.json', 'artifact-sha256sums.txt']) {
+  assert.equal(git(origin, 'show', 'main:.github/workflows/ci.yml'), 'on: pull_request', 'workflows must come from the source commit');
+  for (const excluded of ['.npmrc', 'artifact-manifest.json', 'artifact-sha256sums.txt', '.github/workflows/pwn.yml']) {
     assert(!branchFiles.includes(excluded), `${excluded} must not reach the build branch`);
   }
   mkdirSync(path.join(build, 'sub/.artifact/example/dist'), { recursive: true });
@@ -439,8 +445,8 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   writeFileSync(output, '');
   assert.equal(distributeRun(build, 'Bundle build branch tree', { ...buildEnv, WD: './sub/', STAGE_DIR: '.artifact/example' }).status, 0);
   const subTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
-  assert.deepEqual(git(build, 'ls-tree', '-r', '--name-only', subTree).split('\n'), ['.gitignore', 'plugin.php', 'sub/dist/sub.js'], 'a package directory build must keep the source layout');
-  checks += 8;
+  assert.deepEqual(git(build, 'ls-tree', '-r', '--name-only', subTree).split('\n'), ['.github/workflows/ci.yml', '.gitignore', 'plugin.php', 'sub/dist/sub.js'], 'a package directory build must keep the source layout');
+  checks += 9;
   console.log(`Passed ${checks} actual Bash runner cases.`);
 } finally {
   rmSync(root, { recursive: true, force: true });

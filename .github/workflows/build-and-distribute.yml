@@ -873,6 +873,16 @@ jobs:
             echo "::error::Build branch tree $tree does not match the tree $BUILD_TREE reported by the build job."
             exit 1
           fi
+          # The tree comes from the job that ran project code. Take .github from the source commit so a
+          # build script cannot plant a workflow or local action that the credentialed push would start.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/push-index"
+          git read-tree "$tree"
+          git rm -r -q --cached --ignore-unmatch -- .github
+          if git rev-parse --verify --quiet "$GITHUB_SHA:.github" >/dev/null; then
+            git read-tree --prefix=.github/ "$GITHUB_SHA:.github"
+          fi
+          tree="$(git write-tree)"
+          unset GIT_INDEX_FILE
 
           parents=()
           if base="$(git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH^{commit}")"; then
