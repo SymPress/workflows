@@ -50,7 +50,7 @@ jobs:
       issues: write
     steps:
       - name: Notify on compatibility failure or recovery
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CANARY_RESULT: ${{ needs.qa.result }}
         with:

@@ -92,7 +92,7 @@ jobs:
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
         if: ${{ env.ENV_VARS_JSON != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const raw = process.env.ENV_VARS_JSON || '';

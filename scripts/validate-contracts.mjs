@@ -105,12 +105,17 @@ for (const file of workflowFiles) {
 
 for (const file of workflowFiles) {
   const text = read(file);
-  for (const match of text.matchAll(/^\s*uses:\s+([^@\s#]+)@([^\s#]+)/gm)) {
-    const [, action, ref] = match;
+  for (const match of text.matchAll(/^\s*uses:\s+([^@\s#]+)@([^\s#]+)(.*)$/gm)) {
+    const [, action, ref, comment] = match;
     if (action.startsWith('./')) {
       continue;
     }
     assert(pinnedActionRef.test(ref), `${file} must pin ${action} to a full commit SHA, got ${ref}`);
+    // Dependabot and zizmor only keep a version comment in sync when it names the exact tag.
+    assert(
+      /^ # v?\d+\.\d+\.\d+$/.test(comment),
+      `${file} must annotate ${action} with its full version, e.g. "# v1.2.3", got "${comment.trim()}"`,
+    );
   }
 }
 
