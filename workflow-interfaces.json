@@ -147,15 +147,15 @@
           "required": false
         },
         "workflow_repository": {
-          "description": "Repository containing fallback release templates.",
+          "description": "Repository containing the release templates. Defaults to the repository of this called workflow.",
           "type": "string",
-          "default": "sympress/workflows",
+          "default": "",
           "required": false
         },
         "workflow_ref": {
-          "description": "Ref used when checking out fallback release templates.",
+          "description": "Ref of the release templates. Defaults to the commit of this called workflow.",
           "type": "string",
-          "default": "v1",
+          "default": "",
           "required": false
         },
         "timeout_minutes": {

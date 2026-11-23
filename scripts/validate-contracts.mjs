@@ -301,6 +301,12 @@ assert(release.includes('GIT_CONFIG_KEY_0=credential.helper'), 'release Git auth
 assert(read('templates/automatic-release/run-release.mjs').includes('gitEnvironment(process.env)'), 'release core must not receive Git credential token variables');
 assert(release.includes('concurrency:'), 'automatic-release.yml must serialize release runs');
 assert(!release.includes('default: main'), 'automatic-release.yml fallback workflow_ref must not default to main');
+const releaseInputs = parseDocument(release).toJS().on.workflow_call.inputs;
+assert(releaseInputs.workflow_ref.default === '' && releaseInputs.workflow_repository.default === '', 'automatic-release.yml template ref must not default to a movable alias');
+assert(
+  release.includes('repository: ${{ inputs.workflow_repository || job.workflow_repository }}') && release.includes('ref: ${{ inputs.workflow_ref || job.workflow_sha }}'),
+  'automatic-release.yml must load templates from the called workflow commit by default',
+);
 assert(release.includes('RELEASE_CONFIG: ${{ inputs.release_config }}'), 'automatic-release.yml must pass release_config through env');
 
 const deployWorkflow = parseDocument(deploy).toJS();
