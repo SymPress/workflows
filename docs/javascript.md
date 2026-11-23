@@ -12,7 +12,7 @@ If no JavaScript lockfile exists, workflows fail by default instead of running
 ```yml
 jobs:
   static-analysis:
-    uses: sympress/workflows/.github/workflows/javascript-static-analysis.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
+    uses: sympress/workflows/.github/workflows/javascript-static-analysis.yml@<release-sha> # v2.0.0
     with:
       working_directory: packages/example
       script: typecheck
@@ -26,7 +26,7 @@ Custom `command` values require `allow_custom_command: true`.
 ```yml
 jobs:
   unit-js:
-    uses: sympress/workflows/.github/workflows/javascript-unit.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
+    uses: sympress/workflows/.github/workflows/javascript-unit.yml@<release-sha> # v2.0.0
     with:
       script: test
 ```

@@ -5,7 +5,7 @@ Use `playwright.yml` for browser tests that can run directly on the GitHub runne
 ```yml
 jobs:
   e2e:
-    uses: sympress/workflows/.github/workflows/playwright.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
+    uses: sympress/workflows/.github/workflows/playwright.yml@<release-sha> # v2.0.0
     with:
       playwright_script: test:e2e
       playwright_artifact_path: |
