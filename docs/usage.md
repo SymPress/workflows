@@ -45,8 +45,7 @@ Use these refs intentionally:
 | `@v1` | Historical major alias; its history is preserved. |
 | `@main` | Adoption testing only. |
 
-The examples use the reviewed v1.3.0 release commit
-`8f03d8b2520e366e5d7cc3398e0c368ccb83e311`.
+The examples use the reviewed v1.4.0 release commit `<release-sha>`.
 Upgrade the pin after reviewing and testing the replacement commit.
 
 ## Permissions

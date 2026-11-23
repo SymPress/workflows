@@ -11,6 +11,7 @@ jobs:
     uses: sympress/workflows/.github/workflows/deploy-deployer.yml@<release-sha> # v1.4.0
     with:
       environment: production
+      allowed_refs: refs/heads/main refs/tags/v*
       deployment_directory: deployment
     # GITHUB_USER_SSH_KEY, SSH_KNOWN_HOSTS, DEPLOY_HOSTNAME and DEPLOY_USER are
     # environment secrets of "production" (see docs/deploy.md), not passed here.

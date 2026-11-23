@@ -8,6 +8,7 @@ jobs:
     uses: sympress/workflows/.github/workflows/deploy-deployer.yml@<release-sha> # v1.4.0
     with:
       environment: production
+      allowed_refs: refs/heads/main refs/tags/v*
       deployment_directory: deployment
     secrets:
       COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
