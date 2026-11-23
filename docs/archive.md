@@ -15,7 +15,8 @@ The workflow:
 - installs production Composer dependencies;
 - runs the frontend build script when present;
 - auto-detects a WordPress plugin main file or theme `style.css`;
-- updates `Version` and optional `SHA` headers;
+- updates `Version` and optional `SHA` headers (`package_version` may contain
+  only letters, digits, `.`, `+`, `_` and `-`);
 - stages the artifact in a stable package folder;
 - applies `.distignore` when present;
 - adds `artifact-manifest.json` and `artifact-sha256sums.txt`;

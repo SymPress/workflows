@@ -311,6 +311,12 @@ jobs:
             package_version="${base}-${slug}.${short_sha}"
           fi
 
+          # The version ends up in sed replacements, file names and commit messages.
+          if ! [[ "$package_version" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]*$ ]]; then
+            echo "::error::package_version may contain only letters, digits, '.', '+', '_' and '-', starting with a letter or digit."
+            exit 1
+          fi
+
           {
             echo "source_sha=$(git rev-parse HEAD)"
             echo "built_branch=$built_branch"
