@@ -13,11 +13,13 @@ jobs:
 ```
 
 If the repository has `release.config.cjs`, it is used. Otherwise, the workflow
-copies the built-in SymPress config and helper script from the pinned
-`workflow_ref` input. The example explicitly pins that input to the same reviewed
-commit as the workflow call, selecting its configuration and locked toolchain.
-The compatibility default remains `v1`; set the input explicitly when adopting
-the reviewed version.
+copies the built-in SymPress config and helper script from the release
+templates. By default the templates and the locked toolchain come from the same
+commit as the called workflow (`job.workflow_repository` at `job.workflow_sha`),
+so pinning the `uses:` line pins them too and Dependabot updates both at once.
+Set `workflow_repository` and `workflow_ref` only to load templates from a
+different reviewed commit. Releases before v1.4.0 defaulted `workflow_ref` to the
+movable `v1` tag; callers of those releases should pin the input explicitly.
 
 The fallback config:
 
@@ -44,8 +46,9 @@ local Git dry runs.
 The workflow serializes releases per ref. Both consumer and fallback configs use
 the committed tooling manifest and transitive lockfile from `workflow_ref`,
 installed with `npm ci --ignore-scripts` before release credentials are loaded.
-Pin both the workflow call and `workflow_ref` to the same reviewed immutable SHA
-or protected release tag. Dependabot monitors the tooling manifest separately.
+Pin the workflow call to a reviewed immutable SHA; an explicit `workflow_ref`
+must then point to the same commit, because Dependabot updates only the
+`uses:` line. Dependabot monitors the tooling manifest separately.
 
 HTTPS Git authentication uses a private temporary credential helper containing
 only environment-variable references. Its token is scoped to the release step;
@@ -54,7 +57,7 @@ failure. The wrapper keeps tokens out of semantic-release's core Git environment
 and supplies the GitHub API token only to the official GitHub plugin. Consumer
 plugins and release configs are trusted release code and can read step credentials.
 The helper, tooling directory, signing files, and optional SSH agent are cleaned
-up afterward. Production callers should pin both refs to a reviewed full commit SHA.
+up afterward. Production callers should pin the workflow to a reviewed full commit SHA.
 See [Release Strategy](release-strategy.md).
 
 Release tooling has a separate moderate-severity audit gate. Do not publish a new

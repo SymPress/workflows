@@ -1,0 +1,5 @@
+paths:
+  .github/workflows/automatic-release.yml:
+    ignore:
+      # job.workflow_sha and job.workflow_repository are documented GitHub contexts that actionlint 1.7.12 does not know yet.
+      - 'property "workflow_(sha|repository)" is not defined in object type'
