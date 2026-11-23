@@ -865,6 +865,14 @@ jobs:
           git config core.hooksPath /dev/null
           git config user.email "${GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
           git config user.name "${GIT_NAME:-github-actions[bot]}"
+          # Builds run in parallel and only this job is serialized; its checkout ran after it got the lock.
+          # A newer source commit means a newer build is pushed (or queued), so do not cover it with this one.
+          tip="$(git rev-parse --verify --quiet "refs/remotes/origin/$GITHUB_REF_NAME^{commit}" || true)"
+          if [ "${GITHUB_REF_TYPE:-}" = branch ] && [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::notice::$GITHUB_REF_NAME moved on to $tip; not pushing the outdated build of $GITHUB_SHA."
+            echo "commit=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           bundle="$RUNNER_TEMP/build-tree/build-tree.bundle"
           git bundle verify --quiet "$bundle"
           git -c transfer.fsckObjects=true fetch --no-tags "$bundle" "refs/sympress/build-tree:refs/sympress/build-tree"

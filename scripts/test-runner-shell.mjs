@@ -419,8 +419,12 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   const buildTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
   const push = path.join(distribute, 'push');
   git(distribute, 'clone', '-q', origin, push);
-  const commitEnv = { BUILT_BRANCH: 'main', BUILD_TREE: buildTree, PACKAGE_VERSION: '1.0.0', GIT_EMAIL: '', GIT_NAME: '', GITHUB_SHA: sourceSha };
+  const commitEnv = { BUILT_BRANCH: 'main', BUILD_TREE: buildTree, PACKAGE_VERSION: '1.0.0', GIT_EMAIL: '', GIT_NAME: '', GITHUB_SHA: sourceSha, GITHUB_REF_TYPE: 'branch' };
   assert.notEqual(distributeRun(push, 'Create build commit', { ...commitEnv, BUILD_TREE: '0'.repeat(40) }).status, 0, 'tree mismatch must fail');
+  writeFileSync(output, '');
+  const outdated = distributeRun(push, 'Create build commit', { ...commitEnv, GITHUB_SHA: previousBuild });
+  assert.equal(outdated.status, 0, outdated.stderr);
+  assert.match(readFileSync(output, 'utf8'), /^commit=$/m, 'a build of a superseded source commit must not be pushed');
   writeFileSync(output, '');
   const committed = distributeRun(push, 'Create build commit', commitEnv);
   assert.equal(committed.status, 0, committed.stderr);
@@ -446,7 +450,7 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   assert.equal(distributeRun(build, 'Bundle build branch tree', { ...buildEnv, WD: './sub/', STAGE_DIR: '.artifact/example' }).status, 0);
   const subTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
   assert.deepEqual(git(build, 'ls-tree', '-r', '--name-only', subTree).split('\n'), ['.github/workflows/ci.yml', '.gitignore', 'plugin.php', 'sub/dist/sub.js'], 'a package directory build must keep the source layout');
-  checks += 9;
+  checks += 10;
   console.log(`Passed ${checks} actual Bash runner cases.`);
 } finally {
   rmSync(root, { recursive: true, force: true });
