@@ -43,7 +43,7 @@ permissions:
 
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v2.0.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@4d668133403d357d8335fdbfb850bb13a9105ece # v2.0.0
 ```
 
 ## 3. Configure Secrets
