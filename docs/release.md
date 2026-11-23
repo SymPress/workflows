@@ -5,7 +5,7 @@ Use `automatic-release.yml` for semantic-release based releases.
 ```yml
 jobs:
   release:
-    uses: sympress/workflows/.github/workflows/automatic-release.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/automatic-release.yml@<release-sha> # v1.4.0
     with:
       workflow_ref: 8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
     secrets:

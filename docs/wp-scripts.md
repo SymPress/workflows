@@ -5,7 +5,7 @@ Use `wp-scripts-lint.yml` when a package uses `@wordpress/scripts`.
 ```yml
 jobs:
   wp-scripts:
-    uses: sympress/workflows/.github/workflows/wp-scripts-lint.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/wp-scripts-lint.yml@<release-sha> # v1.4.0
     with:
       lint_tools: '["js","style","md-docs","pkg-json"]'
 ```
