@@ -9,7 +9,7 @@ secrets are exposed.
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
     with:
       php_version: '8.5'
     secrets:
@@ -164,11 +164,11 @@ Archive plus QIT:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@<release-sha> # v1.4.0
 
   qit:
     needs: archive
-    uses: sympress/workflows/.github/workflows/woo-qit.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@<release-sha> # v1.4.0
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
     secrets:
@@ -183,7 +183,7 @@ Composer package:
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
 ```
 
 WordPress plugin archive:
@@ -191,7 +191,7 @@ WordPress plugin archive:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@<release-sha> # v1.4.0
     with:
       package_version: ${{ github.ref_name }}
 ```
@@ -201,11 +201,11 @@ Focused PHP checks:
 ```yml
 jobs:
   phpcs:
-    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@<release-sha> # v1.4.0
 
   phpstan:
-    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@<release-sha> # v1.4.0
 
   phpunit:
-    uses: sympress/workflows/.github/workflows/php-unit.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/php-unit.yml@<release-sha> # v1.4.0
 ```

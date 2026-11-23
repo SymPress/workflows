@@ -5,7 +5,7 @@ Use `wordpress-archive.yml` for plugin or theme artifacts.
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@<release-sha> # v1.4.0
     with:
       package_version: ${{ inputs.version }}
 ```

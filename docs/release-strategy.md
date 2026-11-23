@@ -19,7 +19,7 @@ Production repositories should call workflows with a reviewed full commit SHA:
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@8f03d8b2520e366e5d7cc3398e0c368ccb83e311 # v1.3.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
 ```
 
 Use `@main` only while testing a new workflow or validating an upcoming change.
