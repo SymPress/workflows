@@ -9,7 +9,7 @@ secrets are exposed.
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       php_version: '8.5'
     secrets:
@@ -45,7 +45,7 @@ Use these refs intentionally:
 | `@v1` | Historical major alias; its history is preserved. |
 | `@main` | Adoption testing only. |
 
-The examples use the reviewed v1.4.0 release commit `<release-sha>`.
+The examples use the reviewed v1.4.0 release commit `a258c0d9d040c8c1e682d62ef7ed34c82569df6c`.
 Upgrade the pin after reviewing and testing the replacement commit.
 
 ## Permissions
@@ -163,11 +163,11 @@ Archive plus QIT:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   qit:
     needs: archive
-    uses: sympress/workflows/.github/workflows/woo-qit.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/woo-qit.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       artifact_name: ${{ needs.archive.outputs.artifact }}
     secrets:
@@ -182,7 +182,7 @@ Composer package:
 ```yml
 jobs:
   qa:
-    uses: sympress/workflows/.github/workflows/sympress-qa.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/sympress-qa.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 ```
 
 WordPress plugin archive:
@@ -190,7 +190,7 @@ WordPress plugin archive:
 ```yml
 jobs:
   archive:
-    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/wordpress-archive.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
     with:
       package_version: ${{ github.ref_name }}
 ```
@@ -200,11 +200,11 @@ Focused PHP checks:
 ```yml
 jobs:
   phpcs:
-    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   phpstan:
-    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   phpunit:
-    uses: sympress/workflows/.github/workflows/php-unit.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-unit.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 ```

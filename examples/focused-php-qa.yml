@@ -11,13 +11,13 @@ permissions:
 
 jobs:
   composer:
-    uses: sympress/workflows/.github/workflows/composer-validate.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/composer-validate.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   phpcs:
-    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-coding-standards.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   phpstan:
-    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-static-analysis.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
 
   phpunit:
-    uses: sympress/workflows/.github/workflows/php-unit.yml@<release-sha> # v1.4.0
+    uses: sympress/workflows/.github/workflows/php-unit.yml@a258c0d9d040c8c1e682d62ef7ed34c82569df6c # v1.4.0
