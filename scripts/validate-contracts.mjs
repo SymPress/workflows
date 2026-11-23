@@ -177,6 +177,25 @@ for (const file of [
   assert(document.errors.length === 0, `${file} must be valid YAML`);
 }
 
+// Copyable examples must all pin the release that the newest release notes describe.
+const releaseVersions = listFiles('docs', (file) => /^docs\/release-\d+\.\d+\.\d+\.md$/.test(file))
+  .map((file) => file.match(/(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number))
+  .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+const latestRelease = `v${releaseVersions.at(-1).join('.')}`;
+const docPins = new Set();
+for (const file of referenceFiles) {
+  for (const match of read(file).matchAll(/sympress\/workflows\/\.github\/workflows\/[^@\s]+@(\S+)(.*)$/gim)) {
+    if (match[1] !== 'REVIEWED_40_CHARACTER_COMMIT') {
+      docPins.add(`${match[1]}${match[2]}`);
+    }
+  }
+}
+// <release-sha> stands in for the release commit until the rebase merge creates it.
+assert(
+  docPins.size === 1 && /^([0-9a-f]{40}|<release-sha>) # v\d+\.\d+\.\d+$/.test([...docPins][0]) && [...docPins][0].endsWith(` # ${latestRelease}`),
+  `docs and examples must pin one commit annotated "# ${latestRelease}", found: ${[...docPins].join(', ')}`,
+);
+
 const readme = read('README.md');
 assert(readme.includes('Repository checks'), 'README.md must show repository check status');
 assert(readme.includes('Why teams can trust it'), 'README.md must explain trust signals');
