@@ -110,7 +110,7 @@ try {
   const argsLog = path.join(root, 'git-args');
   const realGit = run('which', ['git'], root).stdout.trim();
   writeFileSync(path.join(fakeBin, 'git'), `#!/bin/sh\nprintf '%s\\n' "$@" >> "$GIT_ARGUMENT_LOG"\nif [ "\${FAIL_GIT_AUTH:-}" = true ] && [ "$1" = push ]; then exit 7; fi\nexec ${JSON.stringify(realGit)} "$@"\n`, { mode: 0o700 });
-  const authUrl = (await import(pathToFileURL(path.join(tools, 'node_modules/semantic-release/lib/get-git-auth-url.js')))).default;
+  const authUrl = (await import(pathToFileURL(path.join(tools, 'node_modules/@semantic-release/core/lib/get-git-auth-url.js')))).default;
   const url = await authUrl({ cwd: root, env: { ...fixtureEnvironment, ...core, PATH: `${fakeBin}:${fixtureEnvironment.PATH}`, GIT_ARGUMENT_LOG: argsLog, FAIL_GIT_AUTH: 'true' }, branch: { name: 'main' }, options: { repositoryUrl: 'https://github.com/example/repo.git' } });
   assert.equal(url, 'https://github.com/example/repo.git');
   assert(!readFileSync(argsLog, 'utf8').includes('canary-token'));
