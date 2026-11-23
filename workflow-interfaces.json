@@ -801,6 +801,12 @@
           "default": false,
           "required": false
         },
+        "allowed_refs": {
+          "description": "Whitespace-separated GITHUB_REF patterns (shell globs, e.g. refs/heads/main refs/tags/v*) allowed to deploy. Empty allows every ref.",
+          "type": "string",
+          "default": "",
+          "required": false
+        },
         "attestation_signer_digest": {
           "description": "Reviewed full commit SHA of the reusable workflow; required with artifact_attestation.",
           "type": "string",

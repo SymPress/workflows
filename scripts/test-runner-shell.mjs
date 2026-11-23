@@ -48,6 +48,17 @@ try {
   executable(path.join(root, 'fake-bin/tee'), 'cat >/dev/null; exit 9');
   assert.equal(run(deploy.run, { PATH: `${root}/fake-bin:${process.env.PATH}` }).status, 9);
   checks++;
+  const refGuard = step('deploy-deployer.yml', 'Check deployment ref');
+  writeFileSync(path.join(root, 'refs-tags-v-file'), '');
+  for (const [ref, allowed, expected] of [
+    ['refs/heads/main', '', 0], ['refs/heads/feature/x', '', 0],
+    ['refs/heads/main', 'refs/heads/main refs/tags/v*', 0], ['refs/tags/v1.2.0', 'refs/heads/main refs/tags/v*', 0],
+    ['refs/heads/feature/x', 'refs/heads/main refs/tags/v*', 1], ['refs/heads/main-old', 'refs/heads/main', 1], ['refs/tags/1.0', 'refs/tags/v*', 1],
+  ]) {
+    assert.equal(run(refGuard.run, { GITHUB_REF: ref, ALLOWED_REFS: allowed }).status, expected, `${ref} with allowed_refs "${allowed}"`);
+    checks++;
+  }
+  rmSync(path.join(root, 'refs-tags-v-file'));
   const guard = step('deploy-deployer.yml', 'Fail on Deployer result');
   for (const [outcome, code, expected] of [['success', '0', 0], ['success', '', 1], ['success', 'oops', 1], ['failure', '0', 1], ['cancelled', '0', 1], ['success', '7', 1]]) {
     assert.equal(run(guard.run, { OUTCOME: outcome, EXIT_CODE: code }).status, expected);
