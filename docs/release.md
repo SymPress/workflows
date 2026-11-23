@@ -69,8 +69,8 @@ prerelease is an exact pin, with no forced writer override. See the
 [upstream migration](https://github.com/semantic-release/release-notes-generator/releases/tag/v15.0.0-beta.2)
 and [beta.3 release](https://github.com/semantic-release/release-notes-generator/releases/tag/v15.0.0-beta.3).
 
-Use Node `^22.22.2` or `>=24.15`; the default Node 24 setup selects a supported
-release. Native preset support covers `angular` and `conventionalcommits`, and
+semantic-release 26 requires Node `>=26.13`; the default Node 26 setup selects a
+supported release. Callers that pass an older `node_version` must raise it to 26. Native preset support covers `angular` and `conventionalcommits`, and
 the omitted-preset default remains Angular. Consumers with custom `writerOpts`
 must migrate Handlebars template strings to
 [Writer 9 render functions](https://conventional-changelog.js.org/changelog-writer/).

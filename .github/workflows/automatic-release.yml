@@ -6,7 +6,7 @@ on:
       node_version:
         description: Node version used for semantic-release.
         type: string
-        default: '24'
+        default: '26'
         required: false
       npm_registry_domain:
         description: npm registry URL.
