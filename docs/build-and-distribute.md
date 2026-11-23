@@ -77,8 +77,11 @@ hands the build branch tree to the next job as a thin Git bundle artifact named
 `<artifact>-build-tree`, kept for one day.
 
 `Push build branch` runs no project code. It verifies the bundle, checks that
-its tree matches the one reported by the build job, commits that tree onto the
-current build branch tip and pushes it. The credentials exist only in that job:
+its tree matches the one reported by the build job, replaces `.github` with the
+directory from the source commit, commits that tree onto the current build
+branch tip and pushes it. A build script therefore cannot plant a workflow or
+local action that a push with `GITHUB_USER_TOKEN` or `GITHUB_USER_SSH_KEY`
+would start. The credentials exist only in that job:
 the token is passed through a step-scoped credential helper and never written
 to `.git/config`, the SSH key is loaded only there, and Git hooks are disabled
 with `core.hooksPath=/dev/null` and `--no-verify`. Pushes for the same ref are
