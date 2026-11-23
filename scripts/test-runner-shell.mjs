@@ -383,7 +383,9 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   git(seed, 'commit', '-qm', 'previous build');
   git(seed, 'push', '-q', origin, 'HEAD:refs/heads/main');
   writeFileSync(path.join(seed, 'plugin.php'), '<?php // source\n');
-  git(seed, 'commit', '-qam', 'source');
+  writeFileSync(path.join(seed, '.gitignore'), 'build/\n');
+  git(seed, 'add', '-A');
+  git(seed, 'commit', '-qm', 'source');
   git(seed, 'push', '-q', origin, 'HEAD:refs/heads/dev/main');
   const previousBuild = git(origin, 'rev-parse', 'main');
   const distributeRun = (cwd, name, env) => spawnSync('bash', ['-c', step('build-and-distribute.yml', name).run], {
@@ -395,9 +397,18 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   const buildEnv = { SOURCE_SHA: sourceSha, BUILT_BRANCH: 'main', EXISTING_BUILD: 'false', GIT_EMAIL: '', GIT_NAME: '' };
   assert.equal(distributeRun(build, 'Configure Git author', buildEnv).status, 0);
   assert.equal(distributeRun(build, 'Checkout build branch', buildEnv).status, 0);
-  writeFileSync(path.join(build, 'app.js'), 'compiled();\n');
+  mkdirSync(path.join(build, 'build'));
+  writeFileSync(path.join(build, 'build/app.js'), 'compiled();\n');
+  writeFileSync(path.join(build, '.npmrc'), '//registry.example/:_authToken=secret\n');
   writeFileSync(output, '');
-  const bundled = distributeRun(build, 'Bundle build branch tree', buildEnv);
+  const packaged = distributeRun(build, 'Prepare artifact', {
+    INPUT_PACKAGE_NAME: 'example', PACKAGE_VERSION: '1.0.0', REPOSITORY_NAME: 'repo', ARTIFACT_ALLOWED_ENV_FILES: '',
+    ARTIFACT_EXTRA_EXCLUDES: '', ARTIFACT_SECRET_SCAN: 'true', ARTIFACT_MANIFEST: 'true', ARTIFACT_ATTESTATION: 'false', WORKFLOW_REF: 'x', RUN_ID: '1', GITHUB_SHA: sourceSha,
+  });
+  assert.equal(packaged.status, 0, packaged.stderr);
+  const stageDir = readFileSync(output, 'utf8').match(/^stage_dir=(.+)$/m)[1];
+  writeFileSync(output, '');
+  const bundled = distributeRun(build, 'Bundle build branch tree', { ...buildEnv, WD: '.', STAGE_DIR: stageDir });
   assert.equal(bundled.status, 0, bundled.stderr);
   const buildTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
   const push = path.join(distribute, 'push');
@@ -418,8 +429,18 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   assert.equal(existsSync(hookMarker), false, 'push must not run repository hooks');
   assert.equal(git(origin, 'rev-parse', 'main^{tree}'), buildTree);
   assert.equal(git(origin, 'rev-parse', 'main^'), previousBuild);
-  assert.equal(git(origin, 'show', 'main:app.js'), 'compiled();');
-  checks += 5;
+  assert.equal(git(origin, 'show', 'main:build/app.js'), 'compiled();', 'ignored build output must reach the build branch');
+  const branchFiles = git(origin, 'ls-tree', '-r', '--name-only', 'main').split('\n');
+  for (const excluded of ['.npmrc', 'artifact-manifest.json', 'artifact-sha256sums.txt']) {
+    assert(!branchFiles.includes(excluded), `${excluded} must not reach the build branch`);
+  }
+  mkdirSync(path.join(build, 'sub/.artifact/example/dist'), { recursive: true });
+  writeFileSync(path.join(build, 'sub/.artifact/example/dist/sub.js'), 'sub();\n');
+  writeFileSync(output, '');
+  assert.equal(distributeRun(build, 'Bundle build branch tree', { ...buildEnv, WD: './sub/', STAGE_DIR: '.artifact/example' }).status, 0);
+  const subTree = readFileSync(output, 'utf8').match(/^tree=(\w+)$/m)[1];
+  assert.deepEqual(git(build, 'ls-tree', '-r', '--name-only', subTree).split('\n'), ['.gitignore', 'plugin.php', 'sub/dist/sub.js'], 'a package directory build must keep the source layout');
+  checks += 8;
   console.log(`Passed ${checks} actual Bash runner cases.`);
 } finally {
   rmSync(root, { recursive: true, force: true });

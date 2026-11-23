@@ -764,7 +764,10 @@ jobs:
               }' > "$manifest_file"
           fi
 
-          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          {
+            echo "artifact=$artifact"
+            echo "stage_dir=.artifact/$package_name"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Bundle build branch tree
         id: bundle
@@ -773,10 +776,27 @@ jobs:
         env:
           SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
           BUILT_BRANCH: ${{ steps.metadata.outputs.built_branch }}
+          WD: ${{ inputs.working_directory }}
+          STAGE_DIR: ${{ steps.package.outputs.stage_dir }}
         run: |
           set -euo pipefail
-          git add -A
+          # The branch gets the checked staging directory, not the workspace: .gitignore must not drop
+          # build output, and the artifact exclusions and secret scan apply. Manifests change every run.
+          export GIT_INDEX_FILE="$RUNNER_TEMP/build-index"
+          rm -f "$GIT_INDEX_FILE"
+          git --work-tree="$WD/$STAGE_DIR" add -A -f -- . ':!artifact-manifest.json' ':!artifact-sha256sums.txt'
           tree="$(git write-tree)"
+          package_path="${WD#./}"
+          package_path="${package_path%/}"
+          package_path="${package_path:-.}"
+          if [ "$package_path" != "." ]; then
+            # Keep the source layout: only the package directory is replaced by its build.
+            git read-tree "$SOURCE_SHA"
+            git rm -r -q --cached --ignore-unmatch -- "$package_path"
+            git read-tree --prefix="$package_path/" "$tree"
+            tree="$(git write-tree)"
+          fi
+          unset GIT_INDEX_FILE
           bases=("$SOURCE_SHA")
           parents=(-p "$SOURCE_SHA")
           if git rev-parse --verify --quiet "refs/remotes/origin/$BUILT_BRANCH" >/dev/null; then

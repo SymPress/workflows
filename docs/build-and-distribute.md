@@ -31,8 +31,15 @@ workflow artifact. The `skipped_existing_build` output reports that decision.
 
 ## Artifact Safety
 
-The build branch is writable, but the uploaded artifact is still guarded.
-Secret-like files are excluded and the staged artifact is validated before
+The build branch and the uploaded artifact share one staged and validated file
+set. Build output ignored by the source `.gitignore` (for example `vendor/` or
+`build/`) is included; `.distignore`, `artifact_extra_excludes` and the secret
+checks apply to both. Only `artifact-manifest.json` and
+`artifact-sha256sums.txt` stay off the branch. With a `working_directory`,
+only that directory is replaced by its build; the rest of the branch mirrors
+the source commit.
+
+Secret-like files are excluded and the staged files are validated before
 upload. Defaults block `.env*`, `.npmrc`, `auth.json`, SSH files, private keys,
 and certificate/key material.
 
