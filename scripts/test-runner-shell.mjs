@@ -367,6 +367,25 @@ echo '{"offers":[{"response":"autoupdate","version":"9.9-beta1"},{"response":"up
   writeFileSync(path.join(app, 'composer.json'), '{"changed":true}');
   assert.equal(runApp(clean.run).status, 1);
   checks += 2;
+  const pwned = path.join(root, 'pwned');
+  const metadataEnv = { INPUT_BUILT_BRANCH: 'main', SOURCE_BRANCH_PREFIX: 'dev/', ALLOW_SAME_BRANCH: 'false' };
+  writeFileSync(path.join(app, 'plugin.php'), '<?php\n/**\n * Plugin Name: Example\n * Version: 0.1.0\n */\n');
+  const archiveEnv = { INPUT_PACKAGE_NAME: 'example', INPUT_PACKAGE_FOLDER: '', INPUT_MAIN_FILE: '', REPOSITORY_NAME: 'repo', SOURCE_SHA: 'a'.repeat(40) };
+  const versionRun = (file, name, env) => spawnSync('bash', ['-c', step(file, name).run], {
+    cwd: app, encoding: 'utf8', timeout: 10000, env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_REF_NAME: 'dev/main', ...env },
+  });
+  const archiveRun = env => versionRun('wordpress-archive.yml', 'Prepare package metadata', { ...archiveEnv, ...env });
+  for (const version of [`1/;etouch ${pwned};#`, '1.0&x', 'release/1.0', '-1']) {
+    assert.equal(versionRun('build-and-distribute.yml', 'Determine build metadata', { ...metadataEnv, INPUT_PACKAGE_VERSION: version }).status, 1, version);
+    assert.equal(archiveRun({ PACKAGE_VERSION: version }).status, 1, version);
+    checks += 2;
+  }
+  assert.equal(existsSync(pwned), false, 'package_version must not reach sed unchecked');
+  assert.equal(versionRun('build-and-distribute.yml', 'Determine build metadata', { ...metadataEnv, INPUT_PACKAGE_VERSION: '1.2.3-rc.1+build_7' }).status, 0);
+  assert.equal(archiveRun({ PACKAGE_VERSION: '1.2.3-rc.1+build_7' }).status, 0);
+  assert.match(readFileSync(path.join(app, 'plugin.php'), 'utf8'), / \* Version: 1\.2\.3-rc\.1\+build_7$/m);
+  assert.equal(archiveRun({ PACKAGE_VERSION: '' }).status, 0, 'an empty version stays optional');
+  checks += 5;
   const distribute = path.join(root, 'distribute');
   const git = (cwd, ...args) => {
     const result = spawnSync('git', ['-c', 'user.name=ci', '-c', 'user.email=ci@example.com', ...args], { cwd, encoding: 'utf8' });

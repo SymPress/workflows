@@ -330,6 +330,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The version ends up in a sed replacement and the artifact name.
+          if [ -n "$PACKAGE_VERSION" ] && ! [[ "$PACKAGE_VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]*$ ]]; then
+            echo "::error::package_version may contain only letters, digits, '.', '+', '_' and '-', starting with a letter or digit."
+            exit 1
+          fi
+
           package_name="${INPUT_PACKAGE_NAME:-$REPOSITORY_NAME}"
           package_folder="${INPUT_PACKAGE_FOLDER:-$package_name}"
           main_file="$INPUT_MAIN_FILE"
