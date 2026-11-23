@@ -82,6 +82,11 @@ on:
         type: boolean
         default: false
         required: false
+      allowed_refs:
+        description: Whitespace-separated GITHUB_REF patterns (shell globs, e.g. refs/heads/main refs/tags/v*) allowed to deploy. Empty allows every ref.
+        type: string
+        default: ''
+        required: false
       attestation_signer_digest:
         description: Reviewed full commit SHA of the reusable workflow; required with artifact_attestation.
         type: string
@@ -976,6 +981,23 @@ jobs:
     env:
       COMPOSER_NO_DEV: 1
     steps:
+      - name: Check deployment ref
+        shell: bash
+        env:
+          ALLOWED_REFS: ${{ inputs.allowed_refs }}
+        run: |
+          set -euo pipefail
+          [ -n "$ALLOWED_REFS" ] || exit 0
+          set -f
+          for pattern in $ALLOWED_REFS; do
+            # shellcheck disable=SC2053 # the pattern is a glob on purpose
+            if [[ "$GITHUB_REF" == $pattern ]]; then
+              exit 0
+            fi
+          done
+          echo "::error::$GITHUB_REF is not in allowed_refs ($ALLOWED_REFS); refusing to deploy."
+          exit 1
+
       - name: Checkout trusted deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
