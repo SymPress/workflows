@@ -85,6 +85,13 @@ its compatibility scan input cannot bypass that requirement. Dependency fetches
 and builds finish before production SSH or WireGuard credentials are loaded.
 Deployment rejects unlocked Node installs even when the compatibility input is set.
 
+`playwright.yml`, `javascript-unit.yml`, `javascript-static-analysis.yml` and
+`wp-scripts-lint.yml` load the optional `GITHUB_USER_SSH_KEY` only to fetch
+private dependencies and remove it from the agent right after the dependency
+install. Builds, tests, linters and `pre_script` run without it. Lifecycle
+scripts during the install itself can still use the agent; keep the key
+read-only and scoped to the dependency repositories.
+
 For build-branch pushes over SSH, provide `GITHUB_KNOWN_HOSTS`. The
 `allow_github_ssh_keyscan` fallback is opt-in for repositories that accept
 trust-on-first-use behavior.

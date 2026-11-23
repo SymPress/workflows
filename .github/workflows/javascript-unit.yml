@@ -235,6 +235,12 @@ jobs:
             npm install
           fi
 
+      - name: Remove SSH key from agent
+        # The key is only needed to fetch private dependencies; builds, tests and pre_script run without it.
+        if: ${{ env.SSH_AUTH_SOCK != '' }}
+        shell: bash
+        run: ssh-add -D
+
       - name: Run tests
         id: run-tests
         working-directory: ${{ inputs.working_directory }}
