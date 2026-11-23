@@ -170,7 +170,7 @@ jobs:
         env:
           ENV_VARS_JSON: ${{ secrets.ENV_VARS }}
         if: ${{ env.ENV_VARS_JSON != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const raw = process.env.ENV_VARS_JSON || '';
@@ -204,7 +204,7 @@ jobs:
             }
 
       - name: Set up DDEV
-        uses: ddev/github-action-setup-ddev@fdf2f5c97943bae638f31df6df86f1defa6210c0 # v1
+        uses: ddev/github-action-setup-ddev@fdf2f5c97943bae638f31df6df86f1defa6210c0 # v1.12.1
         with:
           autostart: false
 
@@ -242,7 +242,7 @@ jobs:
         env:
           DDEV_ENV_VARS_JSON: ${{ secrets.DDEV_ENV_VARS }}
         if: ${{ env.DDEV_ENV_VARS_JSON != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const raw = process.env.DDEV_ENV_VARS_JSON || '';

@@ -109,7 +109,7 @@ jobs:
           persist-credentials: false
 
       - name: Run grammar review
-        uses: reviewdog/action-languagetool@afd06e9b0f782c9562c92efffb66a49c09b2b4f4 # v1
+        uses: reviewdog/action-languagetool@afd06e9b0f782c9562c92efffb66a49c09b2b4f4 # v1.23.0
         with:
           github_token: ${{ github.token }}
           reporter: github-pr-check
