@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "braces": "file:./sympress-bounded-braces-1.0.0.tgz",
-    "semantic-release": "25.0.9",
+    "semantic-release": "26.0.1",
     "@semantic-release/changelog": "7.0.0",
     "@semantic-release/commit-analyzer": "13.0.1",
     "@semantic-release/exec": "7.1.0",
