@@ -12,9 +12,7 @@ jobs:
     with:
       environment: production
       deployment_directory: deployment
+    # GITHUB_USER_SSH_KEY, SSH_KNOWN_HOSTS, DEPLOY_HOSTNAME and DEPLOY_USER are
+    # environment secrets of "production" (see docs/deploy.md), not passed here.
     secrets:
-      GITHUB_USER_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-      DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
