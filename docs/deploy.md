@@ -10,12 +10,37 @@ jobs:
       environment: production
       deployment_directory: deployment
     secrets:
-      GITHUB_USER_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       COMPOSER_AUTH_JSON: ${{ secrets.COMPOSER_AUTH_JSON }}
-      DEPLOY_HOSTNAME: ${{ secrets.DEPLOY_HOSTNAME }}
-      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
 ```
+
+## Protect the deployment secrets
+
+Store the deployment credentials as **environment secrets** of the target
+environment (here `production`), named exactly like the workflow secrets:
+`GITHUB_USER_SSH_KEY`, `SSH_KNOWN_HOSTS`, `DEPLOY_HOSTNAME`, `DEPLOY_USER` and,
+when used, `DEPLOY_PORT` and `WIREGUARD_CONFIGURATION`. Do not pass them from
+the caller. The `deploy` job binds `environment: <environment>`, so GitHub
+supplies the environment secrets there and only there; repository or
+organization secrets passed by the caller are readable by every workflow a
+writer can push.
+
+Configure the environment with required reviewers and a deployment branch
+policy that allows only `main` (and release tags if you deploy from them). As
+a second gate inside the workflow, set `allowed_refs`:
+
+```yml
+    with:
+      environment: production
+      allowed_refs: refs/heads/main refs/tags/v*
+```
+
+`allowed_refs` takes whitespace-separated `GITHUB_REF` glob patterns. The
+`deploy` job fails before it checks out the deployment source or loads any key
+when the run's ref matches none of them, for example a `workflow_dispatch` from
+a feature branch. The default, empty, allows every ref for compatibility.
+`COMPOSER_AUTH_JSON`, `INSTALL_SSH_KEY` and `INSTALL_SSH_KNOWN_HOSTS` are used by
+the dependency job, which has no environment, so they still come from the caller;
+keep them read-only.
 
 The project and deployment directory must each commit a valid `composer.lock`.
 Their installs validate the lock and use `--no-dev --no-scripts --no-plugins`.
